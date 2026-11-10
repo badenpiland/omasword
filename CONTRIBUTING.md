@@ -1,73 +1,26 @@
 # Contributing to omasword
 
-## Commit Guidelines
+## Workflow
 
-This project uses [Conventional Commits](https://www.conventionalcommits.org/) and [Semantic Versioning](https://semver.org/).
+1. Branch from `main` and open a pull request; `main` only changes through
+   merged PRs.
+2. Run `gofmt -w`, `go vet ./...` and `go test ./...` before pushing.
+3. Stage files explicitly (`git add <paths>`), not `git add -A`, so local
+   files such as `.claude/settings.local.json` never end up in a commit.
 
-### Using the Commit Helper
+## Commit messages
 
-We provide a helper script that automatically handles versioning:
+Use [Conventional Commits](https://www.conventionalcommits.org/):
 
-```bash
-./commit.sh <type> <message>
-```
+- `feat:` new feature
+- `fix:` bug fix
+- `refactor:` restructuring without behavior change
+- `docs:`, `chore:`, `test:`, `perf:` as usual
 
-**Commit Types:**
-- `feat` - New feature (increments minor version: 1.0.0 → 1.1.0)
-- `fix` - Bug fix (increments patch version: 1.0.0 → 1.0.1)
-- `breaking` - Breaking change (increments major version: 1.0.0 → 2.0.0)
-- `docs` - Documentation only (no version increment)
-- `refactor` - Code refactoring (no version increment)
-- `chore` - Maintenance tasks (no version increment)
-- `perf` - Performance improvements (no version increment)
-- `test` - Adding tests (no version increment)
-- `style` - Code style changes (no version increment)
+## Versioning
 
-**Examples:**
-
-```bash
-# Add a new feature - version 1.0.0 → 1.1.0
-./commit.sh feat "add dark mode toggle"
-
-# Fix a bug - version 1.1.0 → 1.1.1
-./commit.sh fix "resolve memory leak in cache manager"
-
-# Breaking change - version 1.1.1 → 2.0.0
-./commit.sh breaking "change API endpoint structure"
-
-# Documentation - no version change
-./commit.sh docs "update README with new features"
-```
-
-### Manual Commits
-
-If you commit manually, follow this format:
-
-```
-<type>: <description>
-
-[optional body]
-
-[optional footer]
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-```
-
-**Important:** When committing manually with `feat`, `fix`, or breaking changes, remember to update the version in `internal/version/version.go` according to semantic versioning rules.
-
-## Build System
-
-Use the build script to create versioned builds:
-
-```bash
-./build.sh
-```
-
-This automatically:
-- Increments the build number
-- Injects the build number via ldflags
-- Compiles the binary
-
-The version is displayed in the app footer as: `v1.1.0 (build 18)`
+omasword follows [Semantic Versioning](https://semver.org/). The version
+lives in `internal/version/version.go`; bump it in the PR that prepares a
+release, then tag `vX.Y.Z` on `main`. Pushing the tag runs
+`.github/workflows/release.yml`, which tests, builds Linux amd64/arm64
+binaries and publishes a GitHub release.

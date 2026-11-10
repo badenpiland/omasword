@@ -1,43 +1,20 @@
 # Building omasword
 
-## Build Script
-
-Use the provided build script to automatically increment the build number with each build:
-
-```bash
-./build.sh
-```
-
-This will:
-1. Increment the build number stored in `.build_number`
-2. Compile the application with the build number injected
-3. Output the build number in the footer of the application
-
-## Manual Build
-
-If you want to build without incrementing the build number:
-
 ```bash
 go build -o omasword ./cmd/omasword
 ```
 
-This will show "dev" as the build number.
-
-## Build with Custom Build Number
-
-You can also manually specify a build number:
+This shows `dev` as the build number. To set one:
 
 ```bash
 go build -ldflags "-X omasword/internal/version.BuildNumber=123" -o omasword ./cmd/omasword
 ```
 
-## Version Display
+`./build.sh` does the same with an auto-incrementing number stored in
+`.build_number` (git-ignored).
 
-The version is displayed in the footer of the application in the format:
-```
-v1.0.0 (build <number>)
-```
+The version and build number appear at the right of the header bar and in
+`omasword --version`. The version comes from `internal/version/version.go`.
 
-Where:
-- `v1.0.0` is the version defined in `internal/version/version.go`
-- `<number>` is the build number (either auto-incremented, manually specified, or "dev")
+Release builds come from `.github/workflows/release.yml` when a `v*` tag is
+pushed; they use the tag as the build number.
