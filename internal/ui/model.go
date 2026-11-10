@@ -45,6 +45,9 @@ type Model struct {
 	client                 *api.Client
 	viewport               viewport.Model
 	textInput              textinput.Model
+	// searchErr explains why the last verse lookup was rejected; shown
+	// in the lookup panel until the next attempt.
+	searchErr error
 	translations           []api.Translation
 	selectedTranslation    string
 	currentBook            int
@@ -439,6 +442,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Close sidebar if open when entering search mode
 				m.focus = paneContent
 				m.mode = modeSearch
+				m.searchErr = nil
 				m.textInput.Focus()
 				return m, nil
 			}
@@ -814,19 +818,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.mode == modeSearch {
 				input := m.textInput.Value()
 				book, chapter, verseStart, verseEnd, err := parseReference(input, m.books)
+				var target api.Book
 				if err == nil {
-					m.currentBook = book
+					target, chapter, verseStart, verseEnd, err = validateReference(m.books, book, chapter, verseStart, verseEnd)
+				}
+				m.searchErr = err
+				if err == nil {
+					m.currentBook = target.BookID
 					m.currentChapter = chapter
 					m.highlightedVerseStart = verseStart
 					m.highlightedVerseEnd = verseEnd
-
-					// Look up the book name from the book ID
-					for _, b := range m.books {
-						if b.BookID == book {
-							m.currentBookName = b.Name
-							break
-						}
-					}
+					m.currentBookName = target.Name
 
 					m.mode = modeReader
 					m.loading = true
@@ -843,17 +845,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Plain words like "love" or "rom" fall through to
 						// the full-text path.
 						if strings.ContainsAny(query, "0123456789") {
-							if book, chapter, vs, ve, refErr := parseReference(query, m.books); refErr == nil && book > 0 {
-								m.currentBook = book
+							book, chapter, vs, ve, refErr := parseReference(query, m.books)
+							var target api.Book
+							if refErr == nil {
+								target, chapter, vs, ve, refErr = validateReference(m.books, book, chapter, vs, ve)
+							}
+							if refErr == nil {
+								m.currentBook = target.BookID
 								m.currentChapter = chapter
 								m.highlightedVerseStart = vs
 								m.highlightedVerseEnd = ve
-								for _, b := range m.books {
-									if b.BookID == book {
-										m.currentBookName = b.Name
-										break
-									}
-								}
+								m.currentBookName = target.Name
 								m.mode = modeReader
 								m.loading = true
 								m.wordSearchInput.SetValue("")
@@ -2263,9 +2265,13 @@ func (m Model) renderSearchPanel() string {
 	ti.SetStyles(m.themedInputStyles())
 	ti.SetWidth(innerW - 2)
 
+	hint := hintStyle.Render("e.g. \"John 3:16\" or \"1 1:1\"")
+	if m.searchErr != nil {
+		hint = lipgloss.NewStyle().Foreground(m.currentTheme.Error).Background(bg).Render("⚠ " + m.searchErr.Error())
+	}
 	body := titleStyle.Render("Go to verse") + "\n\n" +
 		ti.View() + "\n\n" +
-		hintStyle.Render("e.g. \"John 3:16\" or \"1 1:1\"")
+		hint
 
 	return box.Render(body)
 }
@@ -3981,6 +3987,34 @@ func parseReference(ref string, books []api.Book) (book, chapter, verseStart, ve
 		}
 	}
 
+	return book, chapter, verseStart, verseEnd, nil
+}
+
+// validateReference checks a parsed reference against the loaded books so
+// out-of-range lookups ("gen 99", "999 1") are rejected instead of opening
+// an empty chapter and saving it as the reading position. A reversed verse
+// range ("1:5-2") is swapped.
+func validateReference(books []api.Book, bookID, chapter, verseStart, verseEnd int) (api.Book, int, int, int, error) {
+	var book api.Book
+	found := false
+	for _, b := range books {
+		if b.BookID == bookID {
+			book, found = b, true
+			break
+		}
+	}
+	if !found {
+		return api.Book{}, 0, 0, 0, fmt.Errorf("no book %d in this translation", bookID)
+	}
+	if chapter < 1 || chapter > book.Chapters {
+		return api.Book{}, 0, 0, 0, fmt.Errorf("%s has %d chapters", book.Name, book.Chapters)
+	}
+	if verseEnd < verseStart {
+		verseStart, verseEnd = verseEnd, verseStart
+	}
+	if verseStart == 0 && verseEnd > 0 {
+		verseStart = verseEnd
+	}
 	return book, chapter, verseStart, verseEnd, nil
 }
 
