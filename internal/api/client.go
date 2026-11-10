@@ -7,9 +7,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 const baseURL = "https://bolls.life"
+
+// requestTimeout bounds every API call. Without it a stalled connection
+// left the UI on "loading" forever with no way to retry.
+const requestTimeout = 30 * time.Second
 
 type CacheInterface interface {
 	IsCached(translation string) bool
@@ -24,7 +29,7 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: requestTimeout},
 	}
 }
 
@@ -123,9 +128,12 @@ func (c *Client) GetBooks(translation string) ([]Book, error) {
 }
 
 func (c *Client) GetChapter(translation string, book, chapter int) ([]Verse, error) {
-	// Try cache first if available
+	// Try cache first if available. A cache file that can't be read
+	// (e.g. truncated) falls back to the API instead of failing forever.
 	if c.cache != nil && c.cache.IsCached(translation) {
-		return c.cache.GetChapter(translation, book, chapter)
+		if verses, err := c.cache.GetChapter(translation, book, chapter); err == nil {
+			return verses, nil
+		}
 	}
 
 	// Fall back to API
@@ -150,9 +158,11 @@ func (c *Client) GetChapter(translation string, book, chapter int) ([]Verse, err
 }
 
 func (c *Client) GetVerse(translation string, book, chapter, verse int) (*Verse, error) {
-	// Try cache first if available
+	// Try cache first if available, falling back to the API on error.
 	if c.cache != nil && c.cache.IsCached(translation) {
-		return c.cache.GetVerse(translation, book, chapter, verse)
+		if v, err := c.cache.GetVerse(translation, book, chapter, verse); err == nil {
+			return v, nil
+		}
 	}
 
 	// Fall back to API

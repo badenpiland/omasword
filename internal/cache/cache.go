@@ -9,10 +9,19 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 	"sword-tui/internal/api"
 )
 
 const baseURL = "https://bolls.life/static/translations"
+
+// downloadClient allows long transfers on slow links but gives up on a
+// server that stops responding.
+var downloadClient = func() *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = 30 * time.Second
+	return &http.Client{Transport: tr, Timeout: 10 * time.Minute}
+}()
 
 type Cache struct {
 	cacheDir string
@@ -98,7 +107,7 @@ func (c *Cache) DownloadTranslation(translation string) error {
 	}()
 
 	url := fmt.Sprintf("%s/%s.zip", baseURL, translation)
-	resp, err := http.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
@@ -149,16 +158,24 @@ func (c *Cache) extractJSON(zipPath, translation string) error {
 			}
 			defer rc.Close()
 
-			// Create output file
+			// Write to a temp file and rename it into place, so an
+			// interrupted or failed extraction never leaves a truncated
+			// <translation>.json that IsCached would treat as valid.
 			outPath := filepath.Join(c.cacheDir, translation+".json")
-			outFile, err := os.Create(outPath)
+			tmp, err := os.CreateTemp(c.cacheDir, translation+".*.tmp")
 			if err != nil {
 				return err
 			}
-			defer outFile.Close()
+			defer os.Remove(tmp.Name()) // no-op after a successful rename
 
-			_, err = io.Copy(outFile, rc)
-			return err
+			if _, err := io.Copy(tmp, rc); err != nil {
+				tmp.Close()
+				return err
+			}
+			if err := tmp.Close(); err != nil {
+				return err
+			}
+			return os.Rename(tmp.Name(), outPath)
 		}
 	}
 
