@@ -97,13 +97,6 @@ func defaultOmarchyThemeDir() string {
 	return ""
 }
 
-// OmarchyAvailable reports whether an Omarchy theme has been loaded.
-func OmarchyAvailable() bool {
-	omarchyMu.RLock()
-	defer omarchyMu.RUnlock()
-	return omarchyTheme != nil
-}
-
 // Omarchy returns the most recently loaded Omarchy theme.
 func Omarchy() (Theme, bool) {
 	omarchyMu.RLock()
@@ -150,15 +143,6 @@ func RefreshOmarchy() bool {
 	defer omarchyMu.Unlock()
 	omarchyTheme, omarchyRaw = &th, raw
 	return true
-}
-
-// LoadOmarchyFrom parses the colors.toml in dir into a Theme.
-func LoadOmarchyFrom(dir string) (Theme, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, "colors.toml"))
-	if err != nil {
-		return Theme{}, err
-	}
-	return parseOmarchyColors(raw)
 }
 
 // parseOmarchyColors maps an Omarchy colors.toml onto a Theme. It accepts

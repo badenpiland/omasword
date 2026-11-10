@@ -99,7 +99,7 @@ omasword
 - `j` / `k`, `↓` / `↑` - Navigate down / up
 - `h` / `l`, `←` / `→` - Navigate left / right between panes
 - `tab` / `shift+tab` - Cycle focus between panes
-- `PgUp` / `PgDn` - Scroll a page at a time
+- `PgUp` / `PgDn` - Previous / next chapter (same as `p` / `n`)
 - `/` - Search by verse reference
 - `s` - Word search
 - `v` - Toggle Miller-columns picker (Books → Chapters → Verses)

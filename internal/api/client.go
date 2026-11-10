@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,7 +20,6 @@ const requestTimeout = 30 * time.Second
 type CacheInterface interface {
 	IsCached(translation string) bool
 	GetChapter(translation string, book, chapter int) ([]Verse, error)
-	GetVerse(translation string, book, chapter, verse int) (*Verse, error)
 }
 
 type Client struct {
@@ -85,6 +85,32 @@ func errorFromResponse(resp *http.Response) error {
 	return fmt.Errorf("API returned status %d: %s", resp.StatusCode, msg)
 }
 
+// maxResponseBytes caps how much JSON one API response may decode. The
+// largest real responses (a long chapter, 500 search hits) are well under
+// 1 MiB.
+const maxResponseBytes = 16 << 20
+
+// doJSON sends req and decodes a 200 response into v.
+func (c *Client) doJSON(req *http.Request, v any) error {
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errorFromResponse(resp)
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(v)
+}
+
+func (c *Client) getJSON(url string, v any) error {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, v)
+}
+
 func checkTranslation(name string) error {
 	if !ValidTranslationName(name) {
 		return fmt.Errorf("invalid translation name %q", name)
@@ -106,19 +132,8 @@ type SearchResponse struct {
 }
 
 func (c *Client) GetTranslations() ([]Translation, error) {
-	url := fmt.Sprintf("%s/static/bolls/app/views/languages.json", baseURL)
-	resp, err := c.httpClient.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
 	var languageGroups []LanguageGroup
-	if err := json.NewDecoder(resp.Body).Decode(&languageGroups); err != nil {
+	if err := c.getJSON(baseURL+"/static/bolls/app/views/languages.json", &languageGroups); err != nil {
 		return nil, err
 	}
 
@@ -145,25 +160,13 @@ func (c *Client) GetBooks(translation string) ([]Book, error) {
 	if err := checkTranslation(translation); err != nil {
 		return nil, err
 	}
-	url := fmt.Sprintf("%s/get-books/%s/", baseURL, translation)
-	resp, err := c.httpClient.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
 	var books []Book
-	if err := json.NewDecoder(resp.Body).Decode(&books); err != nil {
+	if err := c.getJSON(fmt.Sprintf("%s/get-books/%s/", baseURL, translation), &books); err != nil {
 		return nil, err
 	}
 	for i := range books {
 		books[i].Name = SanitizeText(books[i].Name)
 	}
-
 	return books, nil
 }
 
@@ -179,57 +182,12 @@ func (c *Client) GetChapter(translation string, book, chapter int) ([]Verse, err
 		}
 	}
 
-	// Fall back to API
-	url := fmt.Sprintf("%s/get-text/%s/%d/%d/", baseURL, translation, book, chapter)
-	resp, err := c.httpClient.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errorFromResponse(resp)
-	}
-
 	var verses []Verse
-	if err := json.NewDecoder(resp.Body).Decode(&verses); err != nil {
+	if err := c.getJSON(fmt.Sprintf("%s/get-text/%s/%d/%d/", baseURL, translation, book, chapter), &verses); err != nil {
 		return nil, err
 	}
 	sanitizeVerses(verses)
-
 	return verses, nil
-}
-
-func (c *Client) GetVerse(translation string, book, chapter, verse int) (*Verse, error) {
-	if err := checkTranslation(translation); err != nil {
-		return nil, err
-	}
-	// Try cache first if available, falling back to the API on error.
-	if c.cache != nil && c.cache.IsCached(translation) {
-		if v, err := c.cache.GetVerse(translation, book, chapter, verse); err == nil {
-			return v, nil
-		}
-	}
-
-	// Fall back to API
-	url := fmt.Sprintf("%s/get-verse/%s/%d/%d/%d/", baseURL, translation, book, chapter, verse)
-	resp, err := c.httpClient.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var v Verse
-	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
-		return nil, err
-	}
-	v.Text = SanitizeText(v.Text)
-
-	return &v, nil
 }
 
 func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse, error) {
@@ -238,26 +196,19 @@ func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse
 			return nil, err
 		}
 	}
-	url := fmt.Sprintf("%s/get-parallel-verses/", baseURL)
-
-	jsonData, err := json.Marshal(req)
+	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
-
-	resp, err := c.httpClient.Post(url, "application/json", strings.NewReader(string(jsonData)))
+	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/get-parallel-verses/", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	httpReq.Header.Set("Content-Type", "application/json")
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, errorFromResponse(resp)
-	}
-
-	// Response is a nested array structure
+	// The response is one verse list per requested translation, in order.
 	var rawResponse [][]Verse
-	if err := json.NewDecoder(resp.Body).Decode(&rawResponse); err != nil {
+	if err := c.doJSON(httpReq, &rawResponse); err != nil {
 		return nil, err
 	}
 
@@ -277,26 +228,12 @@ func (c *Client) SearchVerses(translation, query string) (*SearchResponse, error
 	if err := checkTranslation(translation); err != nil {
 		return nil, err
 	}
-	// Build URL with query parameters
-	searchURL := fmt.Sprintf("%s/v2/find/%s", baseURL, translation)
 	params := url.Values{}
 	params.Set("search", query)
-	params.Set("limit", "500") // Get more results
-
-	fullURL := searchURL + "?" + params.Encode()
-
-	resp, err := c.httpClient.Get(fullURL)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errorFromResponse(resp)
-	}
+	params.Set("limit", "500")
 
 	var searchResp SearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
+	if err := c.getJSON(fmt.Sprintf("%s/v2/find/%s?%s", baseURL, translation, params.Encode()), &searchResp); err != nil {
 		return nil, err
 	}
 	sanitizeVerses(searchResp.Results)

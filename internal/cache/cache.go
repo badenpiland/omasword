@@ -36,10 +36,18 @@ var downloadClient = func() *http.Client {
 type Cache struct {
 	cacheDir string
 
+	// The most recently read translation, decoded and indexed by
+	// book/chapter, so turning pages doesn't re-parse a multi-MB file.
+	loadedMu    sync.Mutex
+	loadedName  string
+	loadedIndex map[chapterKey][]api.Verse
+
 	mu       sync.Mutex
 	progress float64 // [0, 1] for the current download, 0 if idle
 	active   string  // translation short-name being downloaded, or ""
 }
+
+type chapterKey struct{ book, chapter int }
 
 // progressReader wraps an io.Reader and reports the byte count consumed so far
 // to a parent Cache via its setProgress method.
@@ -77,13 +85,16 @@ func (c *Cache) DownloadProgress() (float64, string) {
 }
 
 func NewCache() (*Cache, error) {
-	// Get user's cache directory
+	userCache, err := os.UserCacheDir() // honors $XDG_CACHE_HOME
+	if err != nil {
+		return nil, err
+	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
 
-	cacheDir := filepath.Join(homeDir, ".cache", "omasword", "translations")
+	cacheDir := filepath.Join(userCache, "omasword", "translations")
 
 	// First run after the rename from sword-tui: bring its downloaded
 	// translations along instead of making the user fetch them again.
@@ -231,59 +242,65 @@ func (c *Cache) extractJSON(zipPath, translation string) error {
 			if err := tmp.Close(); err != nil {
 				return err
 			}
-			return os.Rename(tmp.Name(), outPath)
+			if err := os.Rename(tmp.Name(), outPath); err != nil {
+				return err
+			}
+			c.forget(translation)
+			return nil
 		}
 	}
 
 	return fmt.Errorf("no JSON file found in ZIP")
 }
 
-// GetChapter retrieves a chapter from cached data
+// GetChapter retrieves a chapter from cached data.
 func (c *Cache) GetChapter(translation string, book, chapter int) ([]api.Verse, error) {
 	if !c.IsCached(translation) {
 		return nil, fmt.Errorf("translation %s not cached", translation)
 	}
 
-	path := filepath.Join(c.cacheDir, translation+".json")
-	file, err := os.Open(path)
+	c.loadedMu.Lock()
+	defer c.loadedMu.Unlock()
+	if c.loadedName != translation {
+		index, err := c.loadIndex(translation)
+		if err != nil {
+			return nil, err
+		}
+		c.loadedName, c.loadedIndex = translation, index
+	}
+	// Hand out a copy so callers can't modify the shared index.
+	return append([]api.Verse(nil), c.loadedIndex[chapterKey{book, chapter}]...), nil
+}
+
+// loadIndex decodes a cached translation file into verses by chapter,
+// sanitizing the text once.
+func (c *Cache) loadIndex(translation string) (map[chapterKey][]api.Verse, error) {
+	file, err := os.Open(filepath.Join(c.cacheDir, translation+".json"))
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	var allVerses []api.Verse
-	decoder := json.NewDecoder(file)
-
-	if err := decoder.Decode(&allVerses); err != nil {
+	var all []api.Verse
+	if err := json.NewDecoder(file).Decode(&all); err != nil {
 		return nil, err
 	}
-
-	// Filter verses for the requested book and chapter
-	var verses []api.Verse
-	for _, v := range allVerses {
-		if v.Book == book && v.Chapter == chapter {
-			v.Text = api.SanitizeText(v.Text)
-			verses = append(verses, v)
-		}
+	index := make(map[chapterKey][]api.Verse)
+	for _, v := range all {
+		v.Text = api.SanitizeText(v.Text)
+		k := chapterKey{v.Book, v.Chapter}
+		index[k] = append(index[k], v)
 	}
-
-	return verses, nil
+	return index, nil
 }
 
-// GetVerse retrieves a single verse from cached data
-func (c *Cache) GetVerse(translation string, book, chapter, verse int) (*api.Verse, error) {
-	verses, err := c.GetChapter(translation, book, chapter)
-	if err != nil {
-		return nil, err
+// forget drops the in-memory copy of translation after its file changes.
+func (c *Cache) forget(translation string) {
+	c.loadedMu.Lock()
+	defer c.loadedMu.Unlock()
+	if c.loadedName == translation {
+		c.loadedName, c.loadedIndex = "", nil
 	}
-
-	for _, v := range verses {
-		if v.Verse == verse {
-			return &v, nil
-		}
-	}
-
-	return nil, fmt.Errorf("verse not found")
 }
 
 // ListCached returns a list of cached translations
@@ -305,18 +322,13 @@ func (c *Cache) ListCached() ([]string, error) {
 	return translations, nil
 }
 
-// ClearCache removes all cached translations
-func (c *Cache) ClearCache() error {
-	return os.RemoveAll(c.cacheDir)
-}
-
 // RemoveTranslation removes a specific cached translation
 func (c *Cache) RemoveTranslation(translation string) error {
 	if !api.ValidTranslationName(translation) {
 		return fmt.Errorf("invalid translation name %q", translation)
 	}
-	path := filepath.Join(c.cacheDir, translation+".json")
-	return os.Remove(path)
+	c.forget(translation)
+	return os.Remove(filepath.Join(c.cacheDir, translation+".json"))
 }
 
 // GetCacheSize returns the total size of cached data in bytes

@@ -2,22 +2,22 @@ package ui
 
 import (
 	"fmt"
-	"regexp"
-	"sort"
-	"strconv"
-	"strings"
 	"omasword/internal/api"
 	"omasword/internal/settings"
 	"omasword/internal/theme"
 	"omasword/internal/version"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/atotto/clipboard"
 	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 )
 
 type viewMode int
@@ -27,7 +27,6 @@ const (
 	modeSearch
 	modeComparison
 	modeTranslationSelect
-	modeSidebar
 	modeCacheManager
 	modeAbout
 	modeWordSearch
@@ -41,12 +40,12 @@ const (
 )
 
 type Model struct {
-	client                 *api.Client
-	viewport               viewport.Model
-	textInput              textinput.Model
+	client    *api.Client
+	viewport  viewport.Model
+	textInput textinput.Model
 	// searchErr explains why the last verse lookup was rejected; shown
 	// in the lookup panel until the next attempt.
-	searchErr error
+	searchErr              error
 	translations           []api.Translation
 	selectedTranslation    string
 	currentBook            int
@@ -62,7 +61,6 @@ type Model struct {
 	loading                bool
 	comparisonTranslations []string
 	sidebarSelected        int
-	showSidebar            bool
 	currentVerses          []api.Verse
 	currentParallelVerses  map[string][]api.Verse
 	highlightedVerseStart  int // Start of highlighted verse range
@@ -125,7 +123,6 @@ type Model struct {
 type CacheInterface interface {
 	IsCached(translation string) bool
 	GetChapter(translation string, book, chapter int) ([]api.Verse, error)
-	GetVerse(translation string, book, chapter, verse int) (*api.Verse, error)
 	DownloadTranslation(translation string) error
 	// DownloadProgress reports the byte-level progress of the currently
 	// running download as a value in [0, 1] and the translation
@@ -135,7 +132,6 @@ type CacheInterface interface {
 	ListCached() ([]string, error)
 	GetCacheSize() (int64, error)
 	RemoveTranslation(translation string) error
-	ClearCache() error
 }
 
 type (
@@ -672,27 +668,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.wordSearchLoading = false
 				return m, nil
 			}
-		case "n":
-			if m.mode == modeReader && m.books != nil {
-				for _, book := range m.books {
-					if book.BookID == m.currentBook {
-						if m.currentChapter < book.Chapters {
-							m.currentChapter++
-							m.loading = true
-							m.highlightedVerseStart = 0
-							m.highlightedVerseEnd = 0
-							return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter)
-						}
-					}
-				}
+		case "n", "pgdown":
+			if m.mode == modeReader {
+				return m, m.stepChapter(1)
 			}
-		case "p":
-			if m.mode == modeReader && m.currentChapter > 1 {
-				m.currentChapter--
-				m.loading = true
-				m.highlightedVerseStart = 0
-				m.highlightedVerseEnd = 0
-				return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter)
+		case "p", "pgup":
+			if m.mode == modeReader {
+				return m, m.stepChapter(-1)
 			}
 		case "y":
 			// Yank (copy) highlighted verse(s) or current chapter to clipboard
@@ -724,31 +706,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				clipboard.WriteAll(textToCopy.String())
-			}
-		case "pgdown":
-			// Page down = next chapter
-			if m.mode == modeReader && m.books != nil {
-				for _, book := range m.books {
-					if book.BookID == m.currentBook {
-						if m.currentChapter < book.Chapters {
-							m.currentChapter++
-							m.loading = true
-							m.highlightedVerseStart = 0
-							m.highlightedVerseEnd = 0
-							return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter)
-						}
-						break
-					}
-				}
-			}
-		case "pgup":
-			// Page up = previous chapter
-			if m.mode == modeReader && m.currentChapter > 1 {
-				m.currentChapter--
-				m.loading = true
-				m.highlightedVerseStart = 0
-				m.highlightedVerseEnd = 0
-				return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter)
 			}
 		case "enter":
 			if m.mode == modeTranslationSelect && m.translations != nil && m.translationSelected < len(m.translations) {
@@ -1305,6 +1262,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// stepChapter moves delta chapters within the current book and loads it.
+// It returns nil at either end of the book.
+func (m *Model) stepChapter(delta int) tea.Cmd {
+	next := m.currentChapter + delta
+	if next < 1 {
+		return nil
+	}
+	if delta > 0 {
+		last := 0
+		for _, b := range m.books {
+			if b.BookID == m.currentBook {
+				last = b.Chapters
+				break
+			}
+		}
+		if next > last {
+			return nil
+		}
+	}
+	m.currentChapter = next
+	m.loading = true
+	m.highlightedVerseStart = 0
+	m.highlightedVerseEnd = 0
+	return loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter)
+}
+
 // saveSettings persists the reading position and translation.
 func (m Model) saveSettings() error {
 	return settings.Save(settings.Settings{
@@ -1453,7 +1436,7 @@ func (m Model) renderHeader() string {
 		BorderForeground(m.currentTheme.BorderActive).
 		BorderBackground(bg).
 		Background(bg).
-		Width(width - 2).
+		Width(width-2).
 		Padding(0, 1)
 
 	return box.Render(content)
@@ -1500,7 +1483,7 @@ func (m Model) renderStatusBar() string {
 		BorderForeground(m.currentTheme.Border).
 		BorderBackground(bg).
 		Background(bg).
-		Width(width - 2).
+		Width(width-2).
 		Padding(0, 1)
 
 	return box.Render(hintsSlot + gap + right)
@@ -1736,7 +1719,7 @@ func (m Model) renderLeftPane(outerW, outerH int) string {
 		BorderForeground(border).
 		BorderBackground(bg).
 		Background(bg).
-		Width(outerW - 2).
+		Width(outerW-2).
 		Padding(1, 1)
 
 	return box.Render(sb.String())
@@ -1808,8 +1791,8 @@ func (m Model) renderRightPane(outerW, outerH int) string {
 		BorderForeground(border).
 		BorderBackground(bg).
 		Background(bg).
-		Width(outerW - 2).
-		Height(outerH - 2).
+		Width(outerW-2).
+		Height(outerH-2).
 		Padding(1, 2)
 
 	return box.Render(content)
@@ -2103,7 +2086,7 @@ func (m Model) bookAtRow(y int) (int, bool) {
 
 	// Replay the same windowing the renderer uses.
 	innerH := m.height - headerOuterHeight - statusOuterHeight - 4 // -2 border -2 padding
-	contentLines := innerH - 1 - 2                                // -title -indicators
+	contentLines := innerH - 1 - 2                                 // -title -indicators
 	if contentLines < 1 {
 		contentLines = 1
 	}
@@ -2821,173 +2804,6 @@ func (m Model) renderMillerColumns() string {
 	return lipgloss.JoinVertical(lipgloss.Left, columnsWithShadow.String(), statusBar)
 }
 
-func (m Model) renderSidebar() string {
-	sidebarStyle := lipgloss.NewStyle().
-		Width(30).
-		Height(m.height - 2).
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(m.currentTheme.BorderActive).
-		Background(m.currentTheme.Background).
-		Padding(1)
-
-	selectedStyle := lipgloss.NewStyle().
-		Foreground(m.currentTheme.Accent).
-		Background(m.currentTheme.Background).
-		Bold(true).
-		Padding(0, 1)
-
-	normalStyle := lipgloss.NewStyle().
-		Foreground(m.currentTheme.Primary).
-		Padding(0, 1)
-
-	sectionHeaderStyle := lipgloss.NewStyle().
-		Foreground(m.currentTheme.Success).
-		Background(m.currentTheme.Background).
-		Bold(true).
-		Padding(0, 1).
-		Width(28)
-
-	moreStyle := lipgloss.NewStyle().
-		Foreground(m.currentTheme.Muted).
-		Italic(true).
-		Padding(0, 1)
-
-	var sb strings.Builder
-
-	if m.books != nil {
-		// Calculate available height for book list
-		// Account for border (2), padding (2), and header lines
-		availableHeight := m.height - 8
-
-		// Build a combined list with section headers
-		type bookEntry struct {
-			isHeader   bool
-			headerText string
-			bookIndex  int
-			book       api.Book
-		}
-
-		var entries []bookEntry
-
-		// Old Testament header
-		entries = append(entries, bookEntry{isHeader: true, headerText: "OLD TESTAMENT"})
-
-		// Old Testament books
-		for i, book := range m.books {
-			if book.BookID > 39 {
-				break
-			}
-			entries = append(entries, bookEntry{isHeader: false, bookIndex: i, book: book})
-		}
-
-		// New Testament header (with spacing)
-		entries = append(entries, bookEntry{isHeader: true, headerText: ""}) // blank line
-		entries = append(entries, bookEntry{isHeader: true, headerText: "NEW TESTAMENT"})
-
-		// New Testament books
-		for i, book := range m.books {
-			if book.BookID < 40 {
-				continue
-			}
-			entries = append(entries, bookEntry{isHeader: false, bookIndex: i, book: book})
-		}
-
-		// Find the entry index for the selected book
-		selectedEntryIdx := 0
-		for i, entry := range entries {
-			if !entry.isHeader && entry.bookIndex == m.sidebarSelected {
-				selectedEntryIdx = i
-				break
-			}
-		}
-
-		// Calculate virtual scroll window
-		totalEntries := len(entries)
-		visibleCount := availableHeight
-		if visibleCount < 5 {
-			visibleCount = 5
-		}
-		if visibleCount > totalEntries {
-			visibleCount = totalEntries
-		}
-
-		// Center the selected item in the visible window
-		startIdx := selectedEntryIdx - visibleCount/2
-		if startIdx < 0 {
-			startIdx = 0
-		}
-		endIdx := startIdx + visibleCount
-		if endIdx > totalEntries {
-			endIdx = totalEntries
-			startIdx = endIdx - visibleCount
-			if startIdx < 0 {
-				startIdx = 0
-			}
-		}
-
-		// Show "more above" indicator
-		if startIdx > 0 {
-			sb.WriteString(moreStyle.Render(fmt.Sprintf("... (%d more above)", startIdx)) + "\n")
-		}
-
-		// Render visible entries
-		for i := startIdx; i < endIdx; i++ {
-			entry := entries[i]
-			if entry.isHeader {
-				if entry.headerText == "" {
-					sb.WriteString("\n")
-				} else {
-					sb.WriteString(sectionHeaderStyle.Render(entry.headerText) + "\n")
-				}
-			} else {
-				if entry.bookIndex == m.sidebarSelected {
-					sb.WriteString(selectedStyle.Render("> "+entry.book.Name) + "\n")
-				} else {
-					sb.WriteString(normalStyle.Render("  "+entry.book.Name) + "\n")
-				}
-			}
-		}
-
-		// Show "more below" indicator
-		if endIdx < totalEntries {
-			sb.WriteString(moreStyle.Render(fmt.Sprintf("... (%d more below)", totalEntries-endIdx)) + "\n")
-		}
-	}
-
-	sidebar := sidebarStyle.Render(sb.String())
-
-	// Add shadow effect to the right of the sidebar with gradient
-	shadow1Style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#333333")).
-		Background(lipgloss.Color("#333333"))
-	shadow2Style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#222222")).
-		Background(lipgloss.Color("#222222"))
-	shadow3Style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#111111")).
-		Background(lipgloss.Color("#111111"))
-
-	sidebarLines := strings.Split(sidebar, "\n")
-	shadowLines := make([]string, len(sidebarLines))
-	for i := range sidebarLines {
-		shadowLines[i] = shadow1Style.Render("▌") + shadow2Style.Render("▌") + shadow3Style.Render("▌")
-	}
-
-	// Combine sidebar with shadow
-	var result strings.Builder
-	for i := 0; i < len(sidebarLines); i++ {
-		result.WriteString(sidebarLines[i])
-		if i < len(shadowLines) {
-			result.WriteString(shadowLines[i])
-		}
-		if i < len(sidebarLines)-1 {
-			result.WriteString("\n")
-		}
-	}
-
-	return result.String()
-}
-
 func (m Model) renderTranslationSelect() string {
 	bg := m.currentTheme.Background
 
@@ -3540,13 +3356,25 @@ func intersperse(ss []string, sep string) []string {
 	return out
 }
 
+// Compiled once: stripHTMLTags runs for every verse on every redraw.
+var (
+	htmlTagRe       = regexp.MustCompile(`<[^>]*>`)
+	numericEntityRe = regexp.MustCompile(`&#(\d+);`)
+	hexEntityRe     = regexp.MustCompile(`&#[xX]([0-9a-fA-F]+);`)
+	spaceRunRe      = regexp.MustCompile(`\s+`)
+
+	// Book identifier alternatives, in order of specificity:
+	// digit + letters ("1 John"), letters ("Song of Solomon"), digits ("1").
+	referenceRe = regexp.MustCompile(`(?i)^(\d+\s*[a-z]+(?:\s+[a-z]+)*|[a-z]+(?:\s+[a-z]+)*|\d+)\s*(.*)$`)
+	digitsRe    = regexp.MustCompile(`\d+`)
+)
+
 func stripHTMLTags(s string) string {
 	// Strip HTML tags. The bolls.life API wraps the matched search term
 	// in <em>…</em> *inside* words (e.g. "lov<em>e</em>d"), so replacing
 	// tags with a space would split such words. Drop them outright and
 	// collapse any resulting double spaces at the end.
-	re := regexp.MustCompile(`<[^>]*>`)
-	s = re.ReplaceAllString(s, "")
+	s = htmlTagRe.ReplaceAllString(s, "")
 
 	// Decode common HTML entities
 	s = strings.ReplaceAll(s, "&nbsp;", " ")
@@ -3565,8 +3393,7 @@ func stripHTMLTags(s string) string {
 	s = strings.ReplaceAll(s, "&hellip;", "\u2026") // Ellipsis
 
 	// Decode numeric HTML entities (e.g., &#8220; for left double quote)
-	reNumeric := regexp.MustCompile(`&#(\d+);`)
-	s = reNumeric.ReplaceAllStringFunc(s, func(match string) string {
+	s = numericEntityRe.ReplaceAllStringFunc(s, func(match string) string {
 		// Extract the numeric code
 		numStr := match[2 : len(match)-1]
 		if num, err := strconv.Atoi(numStr); err == nil && num < 0x110000 {
@@ -3576,8 +3403,7 @@ func stripHTMLTags(s string) string {
 	})
 
 	// Decode hex HTML entities (e.g., &#x201C; for left double quote)
-	reHex := regexp.MustCompile(`&#[xX]([0-9a-fA-F]+);`)
-	s = reHex.ReplaceAllStringFunc(s, func(match string) string {
+	s = hexEntityRe.ReplaceAllStringFunc(s, func(match string) string {
 		// Extract the hex code
 		hexStr := match[3 : len(match)-1]
 		if num, err := strconv.ParseInt(hexStr, 16, 32); err == nil && num < 0x110000 {
@@ -3587,8 +3413,7 @@ func stripHTMLTags(s string) string {
 	})
 
 	// Clean up multiple consecutive spaces
-	reSpaces := regexp.MustCompile(`\s+`)
-	s = reSpaces.ReplaceAllString(s, " ")
+	s = spaceRunRe.ReplaceAllString(s, " ")
 
 	// Trim leading and trailing spaces
 	s = strings.TrimSpace(s)
@@ -3730,8 +3555,7 @@ func parseReference(ref string, books []api.Book) (book, chapter, verseStart, ve
 	//   1. digit + optional whitespace + letters (+ more words)  →  "1 John", "1john", "1 Samuel"
 	//   2. letters (+ more words)                                 →  "John", "rom", "Song of Solomon"
 	//   3. digit                                                  →  "1" (book id)
-	bookRe := regexp.MustCompile(`(?i)^(\d+\s*[a-z]+(?:\s+[a-z]+)*|[a-z]+(?:\s+[a-z]+)*|\d+)\s*(.*)$`)
-	m := bookRe.FindStringSubmatch(ref)
+	m := referenceRe.FindStringSubmatch(ref)
 	if m == nil {
 		return 0, 0, 0, 0, fmt.Errorf("invalid reference: %s", ref)
 	}
@@ -3767,9 +3591,8 @@ func parseReference(ref string, books []api.Book) (book, chapter, verseStart, ve
 		afterDash = rest[i+1:]
 	}
 
-	numRe := regexp.MustCompile(`\d+`)
-	beforeNums := numRe.FindAllString(beforeDash, -1)
-	afterNums := numRe.FindAllString(afterDash, -1)
+	beforeNums := digitsRe.FindAllString(beforeDash, -1)
+	afterNums := digitsRe.FindAllString(afterDash, -1)
 
 	if len(beforeNums) >= 1 {
 		chapter, _ = strconv.Atoi(beforeNums[0])
@@ -4095,4 +3918,3 @@ func (m Model) getBookName(bookID int) string {
 	}
 	return fmt.Sprintf("Book %d", bookID)
 }
-
