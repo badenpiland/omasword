@@ -1,6 +1,10 @@
-# omasword
+<p align="center">
+  <img src="assets/omasword.png" width="128" height="128" alt="omasword icon: a pixel sword on a Bible">
+</p>
 
-A terminal-based Bible application built with Go, bubbletea, and lipgloss.
+<h1 align="center">omasword</h1>
+
+<p align="center">A terminal Bible reader for <a href="https://omarchy.org">Omarchy</a>, built with Go, Bubble Tea and Lip Gloss.</p>
 
 omasword is a fork of [sword-tui](https://github.com/kmf/sword-tui) by Karl
 Fischer, renamed and adapted for [Omarchy](https://omarchy.org). It is
@@ -40,12 +44,36 @@ distributed under the same GPL-2.0-or-later license; see [License](#license).
 
 ### From Source
 
-Requires Go 1.26 or newer.
+You need `git` and Go 1.26 or newer. On Omarchy (Arch):
 
 ```bash
+sudo pacman -S --needed git go
+```
+
+Then clone, build, and install to `~/.local/bin` (already on your `PATH` on
+Omarchy):
+
+```bash
+git clone https://github.com/badenpiland/omasword.git
+cd omasword
 go build -o omasword ./cmd/omasword
 install -Dm755 omasword ~/.local/bin/omasword
 ```
+
+To update later, run `git pull` in the `omasword` folder and repeat the last
+two commands.
+
+### Add it to the Omarchy app launcher
+
+From the same `omasword` folder, register it as a TUI app with its icon:
+
+```bash
+omarchy-tui-install omasword omasword tile "$PWD/assets/omasword.png"
+```
+
+It then shows up in the app launcher (`Super + Space`) and opens in its own
+tiled terminal window. To remove the launcher entry, run
+`omarchy-tui-remove omasword`.
 
 Packaging recipes (`PKGBUILD`, `omasword.spec`, `Formula/omasword.rb`) are
 carried over from sword-tui but no omasword packages, tap or COPR repo have
@@ -61,7 +89,7 @@ are left in place, so both programs can be installed side by side.
 ## Usage
 
 ```bash
-./omasword
+omasword
 ```
 
 ### Keyboard Shortcuts
