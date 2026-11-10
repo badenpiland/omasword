@@ -72,6 +72,33 @@ type ParallelVerseRequest struct {
 	Book         int      `json:"book"`
 }
 
+// maxErrorBody caps how much of an error response is read into an error
+// message (it is shown in the status bar).
+const maxErrorBody = 512
+
+func errorFromResponse(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
+	msg := strings.TrimSpace(SanitizeText(string(body)))
+	if msg == "" {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+	return fmt.Errorf("API returned status %d: %s", resp.StatusCode, msg)
+}
+
+func checkTranslation(name string) error {
+	if !ValidTranslationName(name) {
+		return fmt.Errorf("invalid translation name %q", name)
+	}
+	return nil
+}
+
+func sanitizeVerses(verses []Verse) {
+	for i := range verses {
+		verses[i].Text = SanitizeText(verses[i].Text)
+		verses[i].Translation = SanitizeText(verses[i].Translation)
+	}
+}
+
 type SearchResponse struct {
 	ExactMatches int     `json:"exact_matches"`
 	Total        int     `json:"total"`
@@ -95,11 +122,18 @@ func (c *Client) GetTranslations() ([]Translation, error) {
 		return nil, err
 	}
 
-	// Filter for English translations only
+	// Filter for English translations only, dropping any whose short
+	// name isn't safe to use in a URL or cache file name.
 	var englishTranslations []Translation
 	for _, group := range languageGroups {
 		if group.Language == "English" {
-			englishTranslations = group.Translations
+			for _, t := range group.Translations {
+				if !ValidTranslationName(t.ShortName) {
+					continue
+				}
+				t.FullName = SanitizeText(t.FullName)
+				englishTranslations = append(englishTranslations, t)
+			}
 			break
 		}
 	}
@@ -108,6 +142,9 @@ func (c *Client) GetTranslations() ([]Translation, error) {
 }
 
 func (c *Client) GetBooks(translation string) ([]Book, error) {
+	if err := checkTranslation(translation); err != nil {
+		return nil, err
+	}
 	url := fmt.Sprintf("%s/get-books/%s/", baseURL, translation)
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
@@ -123,11 +160,17 @@ func (c *Client) GetBooks(translation string) ([]Book, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&books); err != nil {
 		return nil, err
 	}
+	for i := range books {
+		books[i].Name = SanitizeText(books[i].Name)
+	}
 
 	return books, nil
 }
 
 func (c *Client) GetChapter(translation string, book, chapter int) ([]Verse, error) {
+	if err := checkTranslation(translation); err != nil {
+		return nil, err
+	}
 	// Try cache first if available. A cache file that can't be read
 	// (e.g. truncated) falls back to the API instead of failing forever.
 	if c.cache != nil && c.cache.IsCached(translation) {
@@ -145,19 +188,22 @@ func (c *Client) GetChapter(translation string, book, chapter int) ([]Verse, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, errorFromResponse(resp)
 	}
 
 	var verses []Verse
 	if err := json.NewDecoder(resp.Body).Decode(&verses); err != nil {
 		return nil, err
 	}
+	sanitizeVerses(verses)
 
 	return verses, nil
 }
 
 func (c *Client) GetVerse(translation string, book, chapter, verse int) (*Verse, error) {
+	if err := checkTranslation(translation); err != nil {
+		return nil, err
+	}
 	// Try cache first if available, falling back to the API on error.
 	if c.cache != nil && c.cache.IsCached(translation) {
 		if v, err := c.cache.GetVerse(translation, book, chapter, verse); err == nil {
@@ -181,11 +227,17 @@ func (c *Client) GetVerse(translation string, book, chapter, verse int) (*Verse,
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		return nil, err
 	}
+	v.Text = SanitizeText(v.Text)
 
 	return &v, nil
 }
 
 func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse, error) {
+	for _, t := range req.Translations {
+		if err := checkTranslation(t); err != nil {
+			return nil, err
+		}
+	}
 	url := fmt.Sprintf("%s/get-parallel-verses/", baseURL)
 
 	jsonData, err := json.Marshal(req)
@@ -200,8 +252,7 @@ func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, errorFromResponse(resp)
 	}
 
 	// Response is a nested array structure
@@ -214,6 +265,7 @@ func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse
 	result := make(map[string][]Verse)
 	for i, translation := range req.Translations {
 		if i < len(rawResponse) {
+			sanitizeVerses(rawResponse[i])
 			result[translation] = rawResponse[i]
 		}
 	}
@@ -222,6 +274,9 @@ func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse
 }
 
 func (c *Client) SearchVerses(translation, query string) (*SearchResponse, error) {
+	if err := checkTranslation(translation); err != nil {
+		return nil, err
+	}
 	// Build URL with query parameters
 	searchURL := fmt.Sprintf("%s/v2/find/%s", baseURL, translation)
 	params := url.Values{}
@@ -237,14 +292,14 @@ func (c *Client) SearchVerses(translation, query string) (*SearchResponse, error
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, errorFromResponse(resp)
 	}
 
 	var searchResp SearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
 		return nil, err
 	}
+	sanitizeVerses(searchResp.Results)
 
 	return &searchResp, nil
 }

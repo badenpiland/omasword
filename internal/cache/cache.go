@@ -15,6 +15,15 @@ import (
 
 const baseURL = "https://bolls.life/static/translations"
 
+// Upper bounds for a translation download and its extracted JSON. The
+// largest bolls.life translations are a few MB zipped and ~20 MB
+// extracted; the limits only stop a runaway or malicious response from
+// filling the disk.
+const (
+	maxDownloadBytes  = 100 << 20
+	maxExtractedBytes = 256 << 20
+)
+
 // downloadClient allows long transfers on slow links but gives up on a
 // server that stops responding.
 var downloadClient = func() *http.Client {
@@ -85,6 +94,9 @@ func NewCache() (*Cache, error) {
 
 // IsCached checks if a translation is already downloaded
 func (c *Cache) IsCached(translation string) bool {
+	if !api.ValidTranslationName(translation) {
+		return false
+	}
 	path := filepath.Join(c.cacheDir, translation+".json")
 	_, err := os.Stat(path)
 	return err == nil
@@ -93,6 +105,9 @@ func (c *Cache) IsCached(translation string) bool {
 // DownloadTranslation downloads and caches a translation. While the download
 // runs the cache exposes byte-level progress via DownloadProgress().
 func (c *Cache) DownloadTranslation(translation string) error {
+	if !api.ValidTranslationName(translation) {
+		return fmt.Errorf("invalid translation name %q", translation)
+	}
 	// Mark this download as active so the UI can poll for progress.
 	c.mu.Lock()
 	c.active = translation
@@ -128,9 +143,16 @@ func (c *Cache) DownloadTranslation(translation string) error {
 	// Content-Length. If the server doesn't send Content-Length the bar
 	// stays at 0 — the bubbles/v2 progress renderer handles that as
 	// "indeterminate"-looking.
-	pr := &progressReader{r: resp.Body, cache: c, total: resp.ContentLength}
-	if _, err := io.Copy(tmpFile, pr); err != nil {
+	if resp.ContentLength > maxDownloadBytes {
+		return fmt.Errorf("download too large (%d bytes)", resp.ContentLength)
+	}
+	pr := &progressReader{r: io.LimitReader(resp.Body, maxDownloadBytes+1), cache: c, total: resp.ContentLength}
+	n, err := io.Copy(tmpFile, pr)
+	if err != nil {
 		return err
+	}
+	if n > maxDownloadBytes {
+		return fmt.Errorf("download exceeded %d bytes", maxDownloadBytes)
 	}
 
 	// Treat unzip as the final stretch (97% → 100%).
@@ -168,9 +190,14 @@ func (c *Cache) extractJSON(zipPath, translation string) error {
 			}
 			defer os.Remove(tmp.Name()) // no-op after a successful rename
 
-			if _, err := io.Copy(tmp, rc); err != nil {
+			n, err := io.Copy(tmp, io.LimitReader(rc, maxExtractedBytes+1))
+			if err != nil {
 				tmp.Close()
 				return err
+			}
+			if n > maxExtractedBytes {
+				tmp.Close()
+				return fmt.Errorf("extracted translation exceeds %d bytes", maxExtractedBytes)
 			}
 			if err := tmp.Close(); err != nil {
 				return err
@@ -206,6 +233,7 @@ func (c *Cache) GetChapter(translation string, book, chapter int) ([]api.Verse, 
 	var verses []api.Verse
 	for _, v := range allVerses {
 		if v.Book == book && v.Chapter == chapter {
+			v.Text = api.SanitizeText(v.Text)
 			verses = append(verses, v)
 		}
 	}
@@ -255,6 +283,9 @@ func (c *Cache) ClearCache() error {
 
 // RemoveTranslation removes a specific cached translation
 func (c *Cache) RemoveTranslation(translation string) error {
+	if !api.ValidTranslationName(translation) {
+		return fmt.Errorf("invalid translation name %q", translation)
+	}
 	path := filepath.Join(c.cacheDir, translation+".json")
 	return os.Remove(path)
 }
