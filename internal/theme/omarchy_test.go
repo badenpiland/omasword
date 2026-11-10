@@ -132,8 +132,8 @@ func TestRefreshOmarchyDetectsChanges(t *testing.T) {
 	if RefreshOmarchy() {
 		t.Fatal("unchanged file should not report a change")
 	}
-	if all := AllThemes(); all[0].Name != OmarchyName {
-		t.Fatalf("Omarchy should be listed first, got %q", all[0].Name)
+	if got := hexOf(Current().Background); got != "000000" {
+		t.Fatalf("Current() should be the loaded theme, background = %s", got)
 	}
 
 	write("#112233")
@@ -150,5 +150,8 @@ func TestRefreshOmarchyDetectsChanges(t *testing.T) {
 	}
 	if !RefreshOmarchy() || OmarchyAvailable() {
 		t.Fatal("removing Omarchy should drop the theme")
+	}
+	if got := hexOf(Current().Background); got != "1a1b26" {
+		t.Fatalf("without Omarchy, Current() should fall back to Tokyo Night, background = %s", got)
 	}
 }
