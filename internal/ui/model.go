@@ -1159,6 +1159,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.translations = msg.translations
 
 	case booksLoadedMsg:
+		// A successful load means the earlier error no longer applies.
+		m.err = nil
 		m.books = msg.books
 		for _, book := range m.books {
 			if book.BookID == m.currentBook {
@@ -1168,6 +1170,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case chapterLoadedMsg:
+		// A successful load means the earlier error no longer applies.
+		m.err = nil
 		m.loading = false
 		m.currentVerses = msg.verses
 		m.currentParallelVerses = nil
@@ -1196,6 +1200,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case parallelVersesLoadedMsg:
+		// A successful load means the earlier error no longer applies.
+		m.err = nil
 		m.loading = false
 		m.currentParallelVerses = msg.verses
 		m.currentVerses = nil
@@ -1228,6 +1234,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case searchResultsLoadedMsg:
+		// A successful load means the earlier error no longer applies.
+		m.err = nil
 		m.wordSearchLoading = false
 		m.wordSearchResults = msg.results
 		m.wordSearchTotal = msg.total
