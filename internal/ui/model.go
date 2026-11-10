@@ -349,6 +349,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
+			// "q" is a letter like any other while a text input has
+			// focus; only ctrl+c quits from there.
+			if msg.String() == "q" && m.typingInInput() {
+				break
+			}
 			// Save settings synchronously before quitting to avoid race condition
 			cfg := settings.Settings{
 				SelectedTranslation: m.selectedTranslation,
@@ -1307,6 +1312,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// typingInInput reports whether key presses are currently going to a text
+// input (verse lookup, word search, or the Miller-columns filter). It
+// mirrors the input routing at the end of Update.
+func (m Model) typingInInput() bool {
+	switch {
+	case m.mode == modeSearch:
+		return true
+	case m.mode == modeWordSearch && m.wordSearchResults == nil && !m.wordSearchLoading:
+		return true
+	case m.showMillerColumns && m.millerFilterMode:
+		return true
+	}
+	return false
 }
 
 func (m Model) View() tea.View {
