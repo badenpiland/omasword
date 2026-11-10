@@ -199,6 +199,13 @@ func NewModel() Model {
 	currentChapter := 1
 	currentTheme := theme.CatppuccinMocha
 
+	// Pick up the active Omarchy desktop theme, if there is one.
+	theme.RefreshOmarchy()
+	omarchyTheme, onOmarchy := theme.Omarchy()
+	if onOmarchy {
+		currentTheme = omarchyTheme
+	}
+
 	if err == nil {
 		if cfg.SelectedTranslation != "" {
 			selectedTranslation = cfg.SelectedTranslation
@@ -236,7 +243,9 @@ func NewModel() Model {
 		focus:                  paneContent,
 		// If the user had a theme stored in settings, treat it as pinned
 		// so auto-detect from the terminal background doesn't override it.
-		themePinned:            err == nil && cfg.CurrentTheme != "",
+		// On Omarchy, following the desktop theme counts as a choice too,
+		// so the terminal background probe doesn't replace it.
+		themePinned:            (err == nil && cfg.CurrentTheme != "") || onOmarchy,
 		progressBar:            progress.New(progress.WithDefaultBlend(), progress.WithoutPercentage()),
 		comparisonPickerColumn: -1,
 	}
@@ -258,7 +267,55 @@ func (m Model) Init() tea.Cmd {
 		// Ask the terminal for its background color so we can auto-pick
 		// a light or dark default theme if the user hasn't pinned one.
 		tea.RequestBackgroundColor,
+		omarchyTick(),
 	)
+}
+
+// setTheme applies th and redraws the reading pane, whose text is
+// pre-rendered with the theme's colors baked in.
+func (m *Model) setTheme(th theme.Theme) {
+	m.currentTheme = th
+	m.rerenderContent()
+}
+
+// rerenderContent rebuilds the viewport content for the current chapter
+// or comparison at the current width and theme, keeping the scroll
+// position.
+func (m *Model) rerenderContent() {
+	if !m.ready {
+		return
+	}
+	w := m.viewport.Width()
+	switch {
+	case m.mode == modeComparison && m.currentParallelVerses != nil:
+		m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, w)
+	case m.currentVerses != nil:
+		m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, w, m.highlightedVerseStart, m.highlightedVerseEnd)
+	case m.currentParallelVerses != nil:
+		m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, w)
+	default:
+		return
+	}
+	y := m.viewport.YOffset()
+	m.viewport.SetContent(m.content)
+	m.viewport.SetYOffset(y)
+}
+
+// omarchyPollInterval is how often we check whether the Omarchy desktop
+// theme changed (e.g. via `omarchy theme set`).
+const omarchyPollInterval = time.Second
+
+type omarchyTickMsg struct{}
+
+// omarchyTick schedules the next Omarchy theme check. It is a no-op on
+// systems without Omarchy.
+func omarchyTick() tea.Cmd {
+	if theme.OmarchyThemeDir() == "" {
+		return nil
+	}
+	return tea.Tick(omarchyPollInterval, func(time.Time) tea.Msg {
+		return omarchyTickMsg{}
+	})
 }
 
 func loadTranslations(client *api.Client) tea.Cmd {
@@ -762,7 +819,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.mode == modeThemeSelect && m.themeSelected < len(theme.AllThemes()) {
 				// Select theme and update all colors
 				themes := theme.AllThemes()
-				m.currentTheme = themes[m.themeSelected]
+				m.setTheme(themes[m.themeSelected])
 				m.themePinned = true
 				m.mode = modeReader
 				return m, nil
@@ -1123,6 +1180,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
+	case omarchyTickMsg:
+		// Follow the Omarchy desktop theme live while it's the active one.
+		if theme.RefreshOmarchy() && m.currentTheme.Name == theme.OmarchyName {
+			if th, ok := theme.Omarchy(); ok {
+				m.setTheme(th)
+			}
+		}
+		cmds = append(cmds, omarchyTick())
+
 	case tea.BackgroundColorMsg:
 		// Only act on the first BackgroundColorMsg if the user hasn't
 		// pinned a theme. Pick a sensible default for the terminal's
@@ -1134,7 +1200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				chosen = theme.CatppuccinLatte
 			}
-			m.currentTheme = chosen
+			m.setTheme(chosen)
 			// Sync themeSelected so the picker opens on the right row
 			// next time the user presses T.
 			for i, th := range theme.AllThemes() {
@@ -1161,12 +1227,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Reformat content with new width
-		if m.currentVerses != nil {
-			m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, vpW, m.highlightedVerseStart, m.highlightedVerseEnd)
-		} else if m.currentParallelVerses != nil {
-			m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, vpW)
-		}
-		m.viewport.SetContent(m.content)
+		m.rerenderContent()
 
 	case translationsLoadedMsg:
 		m.translations = msg.translations
@@ -1955,7 +2016,7 @@ func (m *Model) overlayClick(row int) tea.Cmd {
 		themes := theme.AllThemes()
 		if row < len(themes) {
 			m.themeSelected = row
-			m.currentTheme = themes[row]
+			m.setTheme(themes[row])
 			m.themePinned = true
 			m.mode = modeReader
 		}
