@@ -271,6 +271,36 @@ func (m Model) Init() tea.Cmd {
 	)
 }
 
+// setTheme applies th and redraws the reading pane, whose text is
+// pre-rendered with the theme's colors baked in.
+func (m *Model) setTheme(th theme.Theme) {
+	m.currentTheme = th
+	m.rerenderContent()
+}
+
+// rerenderContent rebuilds the viewport content for the current chapter
+// or comparison at the current width and theme, keeping the scroll
+// position.
+func (m *Model) rerenderContent() {
+	if !m.ready {
+		return
+	}
+	w := m.viewport.Width()
+	switch {
+	case m.mode == modeComparison && m.currentParallelVerses != nil:
+		m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, w)
+	case m.currentVerses != nil:
+		m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, w, m.highlightedVerseStart, m.highlightedVerseEnd)
+	case m.currentParallelVerses != nil:
+		m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, w)
+	default:
+		return
+	}
+	y := m.viewport.YOffset()
+	m.viewport.SetContent(m.content)
+	m.viewport.SetYOffset(y)
+}
+
 // omarchyPollInterval is how often we check whether the Omarchy desktop
 // theme changed (e.g. via `omarchy theme set`).
 const omarchyPollInterval = time.Second
@@ -789,7 +819,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.mode == modeThemeSelect && m.themeSelected < len(theme.AllThemes()) {
 				// Select theme and update all colors
 				themes := theme.AllThemes()
-				m.currentTheme = themes[m.themeSelected]
+				m.setTheme(themes[m.themeSelected])
 				m.themePinned = true
 				m.mode = modeReader
 				return m, nil
@@ -1154,7 +1184,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Follow the Omarchy desktop theme live while it's the active one.
 		if theme.RefreshOmarchy() && m.currentTheme.Name == theme.OmarchyName {
 			if th, ok := theme.Omarchy(); ok {
-				m.currentTheme = th
+				m.setTheme(th)
 			}
 		}
 		cmds = append(cmds, omarchyTick())
@@ -1170,7 +1200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				chosen = theme.CatppuccinLatte
 			}
-			m.currentTheme = chosen
+			m.setTheme(chosen)
 			// Sync themeSelected so the picker opens on the right row
 			// next time the user presses T.
 			for i, th := range theme.AllThemes() {
@@ -1197,12 +1227,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Reformat content with new width
-		if m.currentVerses != nil {
-			m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, vpW, m.highlightedVerseStart, m.highlightedVerseEnd)
-		} else if m.currentParallelVerses != nil {
-			m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, vpW)
-		}
-		m.viewport.SetContent(m.content)
+		m.rerenderContent()
 
 	case translationsLoadedMsg:
 		m.translations = msg.translations
@@ -1991,7 +2016,7 @@ func (m *Model) overlayClick(row int) tea.Cmd {
 		themes := theme.AllThemes()
 		if row < len(themes) {
 			m.themeSelected = row
-			m.currentTheme = themes[row]
+			m.setTheme(themes[row])
 			m.themePinned = true
 			m.mode = modeReader
 		}
