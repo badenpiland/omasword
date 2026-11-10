@@ -1396,7 +1396,10 @@ func (m Model) renderHeader() string {
 	accent := m.currentTheme.Accent
 	successCol := m.currentTheme.Success
 
-	logo := "†"
+	// Nerd Font "fa-book_bible": the terminal-sized version of the
+	// omasword icon (assets/omasword.svg). Omarchy ships JetBrainsMono
+	// Nerd Font, so it renders everywhere omasword targets.
+	logo := "\ueebe"
 	logoStyle := lipgloss.NewStyle().Foreground(accent).Background(bg).Bold(true)
 	breadcrumbStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Primary).Background(bg)
 	separatorStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Muted).Background(bg)
@@ -3829,7 +3832,7 @@ func (m Model) renderAbout() string {
 	linkStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Underline(true)
 
 	var content strings.Builder
-	content.WriteString(titleStyle.Render("omasword") + "\n")
+	content.WriteString(titleStyle.Render("\ueebe omasword") + "\n")
 	content.WriteString(sectionStyle.Render("A terminal-based Bible application") + "\n\n")
 
 	content.WriteString(labelStyle.Render("Version: ") + valueStyle.Render(version.Version) + "\n")
