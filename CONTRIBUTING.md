@@ -1,4 +1,4 @@
-# Contributing to sword-tui
+# Contributing to omasword
 
 ## Commit Guidelines
 

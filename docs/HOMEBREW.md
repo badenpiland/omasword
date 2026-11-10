@@ -1,17 +1,20 @@
 # Homebrew Installation Guide
 
-This guide explains how to install sword-tui using Homebrew on macOS and Linux.
+This guide explains how to install omasword using Homebrew on macOS and Linux.
+
+> **Note:** omasword's Homebrew tap has not been published yet. These steps
+> apply once `badenpiland/homebrew-omasword` exists and a release is tagged.
 
 ## For Users
 
-### Installing sword-tui via Homebrew
+### Installing omasword via Homebrew
 
 ```bash
 # Add the tap
-brew tap kmf/sword-tui
+brew tap badenpiland/omasword
 
-# Install sword-tui
-brew install sword-tui
+# Install omasword
+brew install omasword
 ```
 
 The installation downloads pre-built binaries for your platform, so it's fast and doesn't require any build tools.
@@ -25,14 +28,14 @@ The installation downloads pre-built binaries for your platform, so it's fast an
 
 ```bash
 brew update
-brew upgrade sword-tui
+brew upgrade omasword
 ```
 
 ### Uninstalling
 
 ```bash
-brew uninstall sword-tui
-brew untap kmf/sword-tui  # Optional: remove the tap
+brew uninstall omasword
+brew untap badenpiland/omasword  # Optional: remove the tap
 ```
 
 ## For Maintainers
@@ -46,9 +49,9 @@ The Homebrew formula downloads pre-built binaries from GitHub releases instead o
 
 ### Setting up the Tap Repository
 
-1. Create a new GitHub repository named `homebrew-sword-tui` ✅
+1. Create a new GitHub repository named `homebrew-omasword` ✅
 2. Copy the `Formula` directory from this repository to the tap repository
-3. The tap will be available as `kmf/sword-tui`
+3. The tap will be available as `badenpiland/omasword`
 
 ### Updating the Formula
 
@@ -67,7 +70,7 @@ When releasing a new version:
 
 ### Formula Structure
 
-The formula is located at `Formula/sword-tui.rb` and:
+The formula is located at `Formula/omasword.rb` and:
 - Detects the user's platform (macOS/Linux) and architecture
 - Downloads the appropriate pre-built binary from GitHub releases
 - Verifies the download with SHA256 checksum
@@ -76,14 +79,14 @@ The formula is located at `Formula/sword-tui.rb` and:
 ### Binary Release Requirements
 
 For the Homebrew formula to work, each GitHub release must include:
-- `sword-tui-darwin-amd64.tar.gz` (macOS Intel)
-- `sword-tui-darwin-arm64.tar.gz` (macOS Apple Silicon)
-- `sword-tui-linux-amd64.tar.gz` (Linux x86_64)
-- `sword-tui-linux-arm64.tar.gz` (Linux ARM64)
-- `sword-tui-linux-i386.tar.gz` (Linux 32-bit)
+- `omasword-darwin-amd64.tar.gz` (macOS Intel)
+- `omasword-darwin-arm64.tar.gz` (macOS Apple Silicon)
+- `omasword-linux-amd64.tar.gz` (Linux x86_64)
+- `omasword-linux-arm64.tar.gz` (Linux ARM64)
+- `omasword-linux-i386.tar.gz` (Linux 32-bit)
 
 Each tarball should contain:
-- The compiled binary (named `sword-tui-{os}-{arch}`)
+- The compiled binary (named `omasword-{os}-{arch}`)
 - `README.md`
 - `LICENSE`
 
@@ -91,20 +94,20 @@ Each tarball should contain:
 
 ```bash
 # Test the formula
-brew install --verbose Formula/sword-tui.rb
+brew install --verbose Formula/omasword.rb
 
 # Audit the formula
-brew audit --strict Formula/sword-tui.rb
+brew audit --strict Formula/omasword.rb
 
 # Test that it runs
-sword-tui --version
+omasword --version
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Formula not found**: Ensure the tap is added correctly with `brew tap kmf/sword-tui`
+1. **Formula not found**: Ensure the tap is added correctly with `brew tap badenpiland/omasword`
 2. **Wrong architecture**: The formula automatically detects your platform, but you can check with `uname -m`
 3. **Checksum mismatch**: The formula may need updating after a new release
 4. **Binary not found**: Ensure the GitHub release includes binaries for all platforms

@@ -1,4 +1,4 @@
-# Building sword-tui
+# Building omasword
 
 ## Build Script
 
@@ -18,7 +18,7 @@ This will:
 If you want to build without incrementing the build number:
 
 ```bash
-go build -o sword-tui ./cmd/sword-tui
+go build -o omasword ./cmd/omasword
 ```
 
 This will show "dev" as the build number.
@@ -28,7 +28,7 @@ This will show "dev" as the build number.
 You can also manually specify a build number:
 
 ```bash
-go build -ldflags "-X sword-tui/internal/version.BuildNumber=123" -o sword-tui ./cmd/sword-tui
+go build -ldflags "-X omasword/internal/version.BuildNumber=123" -o omasword ./cmd/omasword
 ```
 
 ## Version Display

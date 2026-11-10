@@ -1,4 +1,4 @@
-module sword-tui
+module omasword
 
 go 1.26.0
 

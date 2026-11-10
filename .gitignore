@@ -1,5 +1,5 @@
 # Binaries
-/sword-tui
+/omasword
 *.exe
 *.exe~
 *.dll

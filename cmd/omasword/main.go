@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"omasword/internal/cache"
+	"omasword/internal/ui"
+	"omasword/internal/version"
 	"os"
-	"sword-tui/internal/cache"
-	"sword-tui/internal/ui"
-	"sword-tui/internal/version"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -18,7 +18,7 @@ func main() {
 
 	// Handle version flag
 	if *versionFlag {
-		fmt.Printf("sword-tui %s (build %s)\n", version.Version, version.BuildNumber)
+		fmt.Printf("omasword %s (build %s)\n", version.Version, version.BuildNumber)
 		os.Exit(0)
 	}
 	// Initialize cache

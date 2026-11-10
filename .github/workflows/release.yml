@@ -17,22 +17,22 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-            output: sword-tui-linux-amd64
+            output: omasword-linux-amd64
           - goos: linux
             goarch: arm64
-            output: sword-tui-linux-arm64
+            output: omasword-linux-arm64
           - goos: linux
             goarch: 386
-            output: sword-tui-linux-i386
+            output: omasword-linux-i386
           - goos: darwin
             goarch: amd64
-            output: sword-tui-darwin-amd64
+            output: omasword-darwin-amd64
           - goos: darwin
             goarch: arm64
-            output: sword-tui-darwin-arm64
+            output: omasword-darwin-arm64
           - goos: windows
             goarch: amd64
-            output: sword-tui-windows-amd64.exe
+            output: omasword-windows-amd64.exe
 
     steps:
       - name: Checkout code
@@ -49,9 +49,9 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w -X github.com/kmf/sword-tui/internal/version.BuildNumber=${{ github.ref_name }}" \
+          go build -ldflags="-s -w -X omasword/internal/version.BuildNumber=${{ github.ref_name }}" \
             -o ${{ matrix.output }} \
-            ./cmd/sword-tui
+            ./cmd/omasword
 
       - name: Create tarball (Unix)
         if: matrix.goos != 'windows'

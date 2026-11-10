@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build script for sword-tui that increments build number
+# Build script for omasword that increments build number
 
 BUILD_FILE=".build_number"
 
@@ -18,11 +18,11 @@ BUILD_NUM=$((BUILD_NUM + 1))
 echo "$BUILD_NUM" > "$BUILD_FILE"
 
 # Build with the build number injected
-echo "Building sword-tui (build $BUILD_NUM)..."
-go build -ldflags "-X sword-tui/internal/version.BuildNumber=$BUILD_NUM" -o sword-tui ./cmd/sword-tui
+echo "Building omasword (build $BUILD_NUM)..."
+go build -ldflags "-X omasword/internal/version.BuildNumber=$BUILD_NUM" -o omasword ./cmd/omasword
 
 if [ $? -eq 0 ]; then
-    echo "Build successful: sword-tui (build $BUILD_NUM)"
+    echo "Build successful: omasword (build $BUILD_NUM)"
 else
     echo "Build failed"
     exit 1

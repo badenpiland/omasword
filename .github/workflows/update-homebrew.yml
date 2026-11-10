@@ -18,7 +18,7 @@ jobs:
           VERSION="${{ github.event.release.tag_name }}"
           echo "Waiting for release assets to be available..."
           for i in {1..60}; do
-            if curl -s "https://api.github.com/repos/${{ github.repository }}/releases/tags/${VERSION}" | grep -q "sword-tui-darwin-amd64.tar.gz"; then
+            if curl -s "https://api.github.com/repos/${{ github.repository }}/releases/tags/${VERSION}" | grep -q "omasword-darwin-amd64.tar.gz"; then
               echo "Release assets are available!"
               break
             fi

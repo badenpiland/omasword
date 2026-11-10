@@ -15,15 +15,15 @@ cp -r "$OLDPWD"/* .
 
 # Test the Go build command that Homebrew will use
 echo "Testing Go build..."
-go build -ldflags="-s -w -X github.com/kmf/sword-tui/internal/version.BuildNumber=test" -o sword-tui ./cmd/sword-tui
+go build -ldflags="-s -w -X omasword/internal/version.BuildNumber=test" -o omasword ./cmd/omasword
 
-if [ -f sword-tui ]; then
+if [ -f omasword ]; then
     echo "✅ Build successful!"
-    echo "Binary size: $(ls -lh sword-tui | awk '{print $5}')"
+    echo "Binary size: $(ls -lh omasword | awk '{print $5}')"
     
     # Test if the binary runs
     echo "Testing binary..."
-    if ./sword-tui --version 2>&1 | grep -q "sword-tui"; then
+    if ./omasword --version 2>&1 | grep -q "omasword"; then
         echo "✅ Binary runs successfully!"
     else
         echo "⚠️  Binary runs but --version flag might not be implemented"

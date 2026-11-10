@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"sword-tui/internal/api"
+	"omasword/internal/api"
 )
 
 var testBooks = []api.Book{

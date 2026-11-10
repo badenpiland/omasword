@@ -19,8 +19,8 @@ PLATFORMS=(
 )
 
 for platform in "${PLATFORMS[@]}"; do
-  FILE="sword-tui-${platform}.tar.gz"
-  URL="https://github.com/kmf/sword-tui/releases/download/${LATEST_TAG}/${FILE}"
+  FILE="omasword-${platform}.tar.gz"
+  URL="https://github.com/badenpiland/omasword/releases/download/${LATEST_TAG}/${FILE}"
   
   echo "Calculating SHA256 for ${platform}..."
   SHA256=$(curl -sL "$URL" | sha256sum | awk '{print $1}')
@@ -29,39 +29,39 @@ for platform in "${PLATFORMS[@]}"; do
 done
 
 # Update the formula
-cat > Formula/sword-tui.rb << EOF
-class SwordTui < Formula
+cat > Formula/omasword.rb << EOF
+class Omasword < Formula
   desc "Terminal-based Bible application built with Go"
-  homepage "https://github.com/kmf/sword-tui"
+  homepage "https://github.com/badenpiland/omasword"
   version "${LATEST_TAG#v}"
   license "GPL-2.0-or-later"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/kmf/sword-tui/releases/download/${LATEST_TAG}/sword-tui-darwin-arm64.tar.gz"
+      url "https://github.com/badenpiland/omasword/releases/download/${LATEST_TAG}/omasword-darwin-arm64.tar.gz"
       sha256 "${SHA256_MAP[darwin-arm64]}"
     else
-      url "https://github.com/kmf/sword-tui/releases/download/${LATEST_TAG}/sword-tui-darwin-amd64.tar.gz"
+      url "https://github.com/badenpiland/omasword/releases/download/${LATEST_TAG}/omasword-darwin-amd64.tar.gz"
       sha256 "${SHA256_MAP[darwin-amd64]}"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/kmf/sword-tui/releases/download/${LATEST_TAG}/sword-tui-linux-arm64.tar.gz"
+      url "https://github.com/badenpiland/omasword/releases/download/${LATEST_TAG}/omasword-linux-arm64.tar.gz"
       sha256 "${SHA256_MAP[linux-arm64]}"
     elsif Hardware::CPU.intel? && Hardware::CPU.is_64_bit?
-      url "https://github.com/kmf/sword-tui/releases/download/${LATEST_TAG}/sword-tui-linux-amd64.tar.gz"
+      url "https://github.com/badenpiland/omasword/releases/download/${LATEST_TAG}/omasword-linux-amd64.tar.gz"
       sha256 "${SHA256_MAP[linux-amd64]}"
     else
-      url "https://github.com/kmf/sword-tui/releases/download/${LATEST_TAG}/sword-tui-linux-i386.tar.gz"
+      url "https://github.com/badenpiland/omasword/releases/download/${LATEST_TAG}/omasword-linux-i386.tar.gz"
       sha256 "${SHA256_MAP[linux-i386]}"
     end
   end
 
   def install
-    # The binary name in the tarball follows the pattern sword-tui-{os}-{arch}
-    binary_name = "sword-tui-#{OS.kernel_name.downcase}-"
+    # The binary name in the tarball follows the pattern omasword-{os}-{arch}
+    binary_name = "omasword-#{OS.kernel_name.downcase}-"
     binary_name += if Hardware::CPU.arm?
       "arm64"
     elsif Hardware::CPU.is_64_bit?
@@ -70,7 +70,7 @@ class SwordTui < Formula
       "i386"
     end
     
-    bin.install binary_name => "sword-tui"
+    bin.install binary_name => "omasword"
     
     # Also install README and LICENSE if present
     doc.install "README.md" if File.exist?("README.md")
@@ -79,7 +79,7 @@ class SwordTui < Formula
 
   test do
     # Test that the binary was installed and can run
-    assert_match version.to_s, shell_output("#{bin}/sword-tui --version")
+    assert_match version.to_s, shell_output("#{bin}/omasword --version")
   end
 end
 EOF
