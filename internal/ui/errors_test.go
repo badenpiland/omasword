@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"sword-tui/internal/api"
+	"omasword/internal/api"
 )
 
 func TestSuccessfulLoadClearsError(t *testing.T) {

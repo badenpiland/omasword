@@ -10,7 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	"sword-tui/internal/api"
+
+	"omasword/internal/api"
 )
 
 const baseURL = "https://bolls.life/static/translations"
@@ -82,7 +83,13 @@ func NewCache() (*Cache, error) {
 		return nil, err
 	}
 
-	cacheDir := filepath.Join(homeDir, ".cache", "sword-tui", "translations")
+	cacheDir := filepath.Join(homeDir, ".cache", "omasword", "translations")
+
+	// First run after the rename from sword-tui: bring its downloaded
+	// translations along instead of making the user fetch them again.
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		migrateLegacyCache(filepath.Join(homeDir, ".cache", "sword-tui", "translations"), cacheDir)
+	}
 
 	// Create cache directory if it doesn't exist
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
@@ -90,6 +97,28 @@ func NewCache() (*Cache, error) {
 	}
 
 	return &Cache{cacheDir: cacheDir}, nil
+}
+
+// migrateLegacyCache copies cached translations from a sword-tui cache
+// directory. Failures are ignored: the cache can always be rebuilt.
+func migrateLegacyCache(from, to string) {
+	entries, err := os.ReadDir(from)
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(to, 0755); err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.Type().IsRegular() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(from, e.Name()))
+		if err != nil {
+			continue
+		}
+		_ = os.WriteFile(filepath.Join(to, e.Name()), data, 0644)
+	}
 }
 
 // IsCached checks if a translation is already downloaded

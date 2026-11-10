@@ -1,6 +1,6 @@
 # TODO
 
-Feature backlog for sword-tui, anchored against the v2 charm stack
+Feature backlog for omasword, anchored against the v2 charm stack
 (bubbletea v2.0.7, bubbles v2.1.0, lipgloss v2.0.3).
 
 Roughly ordered by impact / effort. Each entry names the underlying v2
@@ -106,7 +106,7 @@ actually provides.
   component cleanly.
 
 - [ ] **Custom theme loader** (theme package extension)
-  Read `~/.config/sword-tui/themes/*.json` (matching the
+  Read `~/.config/omasword/themes/*.json` (matching the
   `palette.json` shape used by Bru / Jozi) and surface as additional
   themes. Lets users drop in new schemes without a rebuild.
 

@@ -1,10 +1,13 @@
-# Maintainer: Karl Fischer <kmf@fischer.org.za>
-pkgname=sword-tui
+# Maintainer: badenpiland
+# Contributor: Karl Fischer <kmf@fischer.org.za> (original sword-tui)
+# pkgver and sha256sums still describe the last upstream sword-tui release;
+# update both once an omasword release is tagged.
+pkgname=omasword
 pkgver=2.0.0
 pkgrel=1
 pkgdesc="A terminal-based Bible application built with Go and bubbletea"
 arch=('x86_64' 'aarch64' 'armv7h')
-url="https://github.com/kmf/sword-tui"
+url="https://github.com/badenpiland/omasword"
 license=('GPL-2.0-or-later')
 depends=()
 makedepends=('go')
@@ -19,7 +22,7 @@ build() {
     export CGO_LDFLAGS="${LDFLAGS}"
     export GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw"
 
-    go build -o ${pkgname} ./cmd/sword-tui
+    go build -o ${pkgname} ./cmd/omasword
 }
 
 package() {

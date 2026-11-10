@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sword-tui/internal/api"
-	"sword-tui/internal/settings"
-	"sword-tui/internal/theme"
-	"sword-tui/internal/version"
+	"omasword/internal/api"
+	"omasword/internal/settings"
+	"omasword/internal/theme"
+	"omasword/internal/version"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -1411,7 +1411,7 @@ func (m Model) renderHeader() string {
 		chapter = "—"
 	}
 
-	breadcrumb := logoStyle.Render(logo+" sword-tui") +
+	breadcrumb := logoStyle.Render(logo+" omasword") +
 		separatorStyle.Render("  ·  ") +
 		breadcrumbStyle.Render(m.selectedTranslation) +
 		separatorStyle.Render(" › ") +
@@ -3829,13 +3829,14 @@ func (m Model) renderAbout() string {
 	linkStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Underline(true)
 
 	var content strings.Builder
-	content.WriteString(titleStyle.Render("sword-tui") + "\n")
+	content.WriteString(titleStyle.Render("omasword") + "\n")
 	content.WriteString(sectionStyle.Render("A terminal-based Bible application") + "\n\n")
 
 	content.WriteString(labelStyle.Render("Version: ") + valueStyle.Render(version.Version) + "\n")
 	content.WriteString(labelStyle.Render("Build:   ") + valueStyle.Render(version.BuildNumber) + "\n\n")
 
-	content.WriteString(labelStyle.Render("Repo:    ") + linkStyle.Render("github.com/kmf/sword-tui") + "\n")
+	content.WriteString(labelStyle.Render("Repo:    ") + linkStyle.Render("github.com/badenpiland/omasword") + "\n")
+	content.WriteString(labelStyle.Render("Fork of: ") + linkStyle.Render("github.com/kmf/sword-tui") + "\n")
 	content.WriteString(labelStyle.Render("API:     ") + valueStyle.Render("bolls.life") + "\n")
 	content.WriteString(labelStyle.Render("License: ") + valueStyle.Render("GPL-2.0-or-later") + "\n\n")
 

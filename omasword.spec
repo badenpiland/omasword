@@ -1,10 +1,10 @@
-Name:           sword-tui
+Name:           omasword
 Version:        2.1.0
 Release:        1%{?dist}
 Summary:        Terminal Bible reader built with Go and Bubbletea
 
 License:        GPL-2.0-or-later
-URL:            https://github.com/kmf/sword-tui
+URL:            https://github.com/badenpiland/omasword
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 # Builds offline-fetching the network for Go modules, which is the
@@ -19,7 +19,7 @@ Requires:       glibc
 ExclusiveArch:  %{go_arches}
 
 %description
-sword-tui is a multi-pane terminal Bible reader written in Go. It uses
+omasword is a multi-pane terminal Bible reader written in Go. It uses
 the bolls.life Bible API for translations, supports offline caching,
 side-by-side comparison across translations, themeable colorschemes
 (Catppuccin, Dracula, Rosé Pine, Solarized, Bru, Jozi City Nights),

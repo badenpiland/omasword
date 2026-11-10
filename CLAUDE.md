@@ -4,23 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-sword-tui is a terminal-based Bible application built with Go using the Bubbletea TUI framework. It connects to the bolls.life API for Bible data.
+omasword is a terminal-based Bible application built with Go using the Bubbletea TUI framework. It connects to the bolls.life API for Bible data.
 
 ## Build & Run
 
 ```bash
 # Build the application
-go build -o sword-tui cmd/sword-tui/main.go
+go build -o omasword cmd/omasword/main.go
 
 # Run the application
-./sword-tui
+./omasword
 ```
 
 ## Architecture
 
 The application follows a clean three-layer architecture:
 
-### 1. Entry Point (`cmd/sword-tui/main.go`)
+### 1. Entry Point (`cmd/omasword/main.go`)
 - Initializes the Bubbletea program with alt screen and mouse support
 - Creates and runs the UI model
 

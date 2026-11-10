@@ -1,6 +1,10 @@
-# sword-tui
+# omasword
 
 A terminal-based Bible application built with Go, bubbletea, and lipgloss.
+
+omasword is a fork of [sword-tui](https://github.com/kmf/sword-tui) by Karl
+Fischer, renamed and adapted for [Omarchy](https://omarchy.org). It is
+distributed under the same GPL-2.0-or-later license; see [License](#license).
 
 ## Features
 
@@ -34,42 +38,30 @@ A terminal-based Bible application built with Go, bubbletea, and lipgloss.
 
 ## Installation
 
-### Homebrew (macOS and Linux)
-
-```bash
-# Install from the tap
-brew tap kmf/sword-tui
-brew trust kmf/sword-tui
-brew install sword-tui
-```
-
 ### From Source
 
-```bash
-go build -o sword-tui cmd/sword-tui/main.go
-```
-
-### Arch Linux (AUR)
+Requires Go 1.26 or newer.
 
 ```bash
-yay -S sword-tui
+go build -o omasword ./cmd/omasword
+install -Dm755 omasword ~/.local/bin/omasword
 ```
 
-### Fedora / RHEL (COPR)
+Packaging recipes (`PKGBUILD`, `omasword.spec`, `Formula/omasword.rb`) are
+carried over from sword-tui but no omasword packages, tap or COPR repo have
+been published yet.
 
-Enable the [kmf/sword-tui](https://copr.fedorainfracloud.org/coprs/kmf/sword-tui/) COPR repo and install:
+### Coming from sword-tui
 
-```bash
-sudo dnf copr enable kmf/sword-tui
-sudo dnf install sword-tui
-```
-
-Supported chroots: Fedora (current and previous release), RHEL/CentOS Stream 9 (`epel-9`), RHEL/CentOS Stream 10 (`epel-10`).
+On first run omasword copies your sword-tui settings
+(`~/.config/sword-tui/config.json`) and downloaded translations
+(`~/.cache/sword-tui/translations`) into its own directories. The originals
+are left in place, so both programs can be installed side by side.
 
 ## Usage
 
 ```bash
-./sword-tui
+./omasword
 ```
 
 ### Keyboard Shortcuts
@@ -99,4 +91,7 @@ Uses the [bolls.life API](https://bolls.life/api/) for Bible data.
 
 ## License
 
-GPL-2.0-or-later
+GPL-2.0-or-later. omasword is a modified version of
+[sword-tui](https://github.com/kmf/sword-tui) by Karl Fischer, which is
+licensed the same way. Changes since the fork are recorded in this
+repository's git history.
