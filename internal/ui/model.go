@@ -190,7 +190,7 @@ func NewModel() Model {
 	// --- Load persisted settings (if any) ---
 	cfg, err := settings.Load()
 
-	selectedTranslation := "NLT"
+	selectedTranslation := "ESV"
 	currentBook := 1
 	currentChapter := 1
 
@@ -220,7 +220,7 @@ func NewModel() Model {
 		currentChapter:         currentChapter,
 		currentBookName:        "Genesis", // corrected after books load
 		mode:                   modeReader,
-		comparisonTranslations: []string{"NLT", "KJV", "WEB"},
+		comparisonTranslations: []string{"ESV", "KJV", "NLT"},
 		currentTheme:           currentTheme,
 		focus:                  paneContent,
 		progressBar:            progress.New(progress.WithDefaultBlend(), progress.WithoutPercentage()),
@@ -894,7 +894,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else if m.mode == modeTranslationSelect {
 				// Simple translation selection (cycle through common ones)
-				translations := []string{"NLT", "KJV", "ASV", "WEB", "YLT", "DARBY"}
+				translations := []string{"ESV", "NLT", "KJV", "ASV", "WEB", "YLT", "DARBY"}
 				for i, t := range translations {
 					if t == m.selectedTranslation {
 						m.selectedTranslation = translations[(i+1)%len(translations)]
