@@ -10,7 +10,6 @@ type Settings struct {
 	SelectedTranslation string `json:"selected_translation"`
 	CurrentBook         int    `json:"current_book"`
 	CurrentChapter      int    `json:"current_chapter"`
-	CurrentTheme        string `json:"current_theme"` // theme display name
 }
 
 func configPath() (string, error) {

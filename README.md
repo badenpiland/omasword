@@ -16,20 +16,11 @@ A terminal-based Bible application built with Go, bubbletea, and lipgloss.
 - **Side-by-Side Comparison**: Per-column translation pickers for parallel reading
 - **Verse Lookup**: Jump directly to any book, chapter, and verse
 - **Offline Cache**: Automatic caching with a real byte-level progress bar for downloads
-- **Persistent State**: Theme and last-read position survive restarts
+- **Persistent State**: Translation and last-read position survive restarts
 
 ### User Interface
 - **Modern Terminal UI**: Built on the charm v2 stack (bubbletea, lipgloss)
-- **12 Themes** across dark and light variants:
-  - Catppuccin Mocha / Latte
-  - Dracula
-  - Rosé Pine Moon / Dawn
-  - Solarized Dark / Light
-  - Bru Espresso / Latte
-  - Jozi Nights / Morning / Midnight
-- **Omarchy Theme Sync**: On [Omarchy](https://omarchy.org), an extra "Omarchy" theme uses your desktop theme's colors and follows `omarchy theme set` live. It's the default on Omarchy; any theme you pick in `T` takes precedence
-- **Auto Light/Dark Detection**: Picks a sensible default based on terminal background
-- **Live Theme Preview**: See a preview card while choosing a theme
+- **Omarchy Theme Sync**: Colors come from your active [Omarchy](https://omarchy.org) theme and follow `omarchy theme set` live. Without Omarchy, it uses Omarchy's default Tokyo Night colors
 - **Sticky Chapter Header**: Morphs into a scroll indicator as you read
 - **Viewport-Based Text Wrapping**: Prevents text from rendering off-screen
 - **Visual Depth Effects**: Dimming and shadow effects for focused elements
@@ -94,7 +85,6 @@ Supported chroots: Fedora (current and previous release), RHEL/CentOS Stream 9 (
 - `v` - Toggle Miller-columns picker (Books → Chapters → Verses)
 - `c` - Comparison view (side-by-side translations)
 - `t` - Translation picker
-- `T` - Theme picker
 - `d` - Cache manager (`x` deletes a cached translation here)
 - `r` - Return to reader from any overlay
 - `y` - Yank/copy selected verse

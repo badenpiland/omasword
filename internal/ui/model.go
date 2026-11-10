@@ -29,7 +29,6 @@ const (
 	modeTranslationSelect
 	modeSidebar
 	modeCacheManager
-	modeThemeSelect
 	modeAbout
 	modeWordSearch
 )
@@ -84,8 +83,7 @@ type Model struct {
 	// Translation selection state
 	translationSelected int
 	// Theme state
-	currentTheme  theme.Theme
-	themeSelected int
+	currentTheme theme.Theme
 	// Word search state
 	wordSearchInput    textinput.Model
 	wordSearchQuery    string
@@ -95,11 +93,6 @@ type Model struct {
 	wordSearchLoading  bool
 	// Pane focus (book list vs content)
 	focus focusPane
-	// themePinned is true when the user has an explicit theme stored in
-	// settings (or has picked one this session). When false, an incoming
-	// BackgroundColorMsg from the terminal may swap us to a light or
-	// dark default.
-	themePinned bool
 	// topVisibleVerse mirrors the verse number currently at the top of
 	// the viewport. The right pane title surfaces it as a sticky scroll
 	// indicator so the reader always knows where they are.
@@ -197,14 +190,10 @@ func NewModel() Model {
 	selectedTranslation := "NLT"
 	currentBook := 1
 	currentChapter := 1
-	currentTheme := theme.CatppuccinMocha
 
-	// Pick up the active Omarchy desktop theme, if there is one.
+	// Colors always follow the active Omarchy desktop theme.
 	theme.RefreshOmarchy()
-	omarchyTheme, onOmarchy := theme.Omarchy()
-	if onOmarchy {
-		currentTheme = omarchyTheme
-	}
+	currentTheme := theme.Current()
 
 	if err == nil {
 		if cfg.SelectedTranslation != "" {
@@ -215,15 +204,6 @@ func NewModel() Model {
 		}
 		if cfg.CurrentChapter > 0 {
 			currentChapter = cfg.CurrentChapter
-		}
-		if cfg.CurrentTheme != "" {
-			// Match by display name against all known themes
-			for _, th := range theme.AllThemes() {
-				if th.Name == cfg.CurrentTheme {
-					currentTheme = th
-					break
-				}
-			}
 		}
 	}
 
@@ -239,13 +219,7 @@ func NewModel() Model {
 		mode:                   modeReader,
 		comparisonTranslations: []string{"NLT", "KJV", "WEB"},
 		currentTheme:           currentTheme,
-		themeSelected:          0,
 		focus:                  paneContent,
-		// If the user had a theme stored in settings, treat it as pinned
-		// so auto-detect from the terminal background doesn't override it.
-		// On Omarchy, following the desktop theme counts as a choice too,
-		// so the terminal background probe doesn't replace it.
-		themePinned:            (err == nil && cfg.CurrentTheme != "") || onOmarchy,
 		progressBar:            progress.New(progress.WithDefaultBlend(), progress.WithoutPercentage()),
 		comparisonPickerColumn: -1,
 	}
@@ -264,9 +238,6 @@ func (m Model) Init() tea.Cmd {
 		loadTranslations(m.client),
 		loadBooks(m.client, m.selectedTranslation),
 		loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter),
-		// Ask the terminal for its background color so we can auto-pick
-		// a light or dark default theme if the user hasn't pinned one.
-		tea.RequestBackgroundColor,
 		omarchyTick(),
 	)
 }
@@ -381,7 +352,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				SelectedTranslation: m.selectedTranslation,
 				CurrentBook:         m.currentBook,
 				CurrentChapter:      m.currentChapter,
-				CurrentTheme:        m.currentTheme.Name,
 			}
 			_ = settings.Save(cfg)
 			return m, tea.Quit
@@ -476,9 +446,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.mode == modeTranslationSelect && m.translations != nil && m.translationSelected > 0 {
 				m.translationSelected--
 				return m, nil
-			} else if m.mode == modeThemeSelect && m.themeSelected > 0 {
-				m.themeSelected--
-				return m, nil
 			} else if m.mode == modeCacheManager && m.translations != nil && m.cacheSelected > 0 {
 				m.cacheSelected--
 				return m, nil
@@ -528,9 +495,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			} else if m.mode == modeTranslationSelect && m.translations != nil && m.translationSelected < len(m.translations)-1 {
 				m.translationSelected++
-				return m, nil
-			} else if m.mode == modeThemeSelect && m.themeSelected < len(theme.AllThemes())-1 {
-				m.themeSelected++
 				return m, nil
 			} else if m.mode == modeCacheManager && m.translations != nil && m.cacheSelected < len(m.translations)-1 {
 				m.cacheSelected++
@@ -647,20 +611,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.translationSelected = i
 							break
 						}
-					}
-				}
-				return m, nil
-			}
-		case "T":
-			if m.mode == modeReader {
-				m.mode = modeThemeSelect
-				m.themeSelected = 0
-				// Find current theme in list
-				themes := theme.AllThemes()
-				for i, thm := range themes {
-					if thm.Name == m.currentTheme.Name {
-						m.themeSelected = i
-						break
 					}
 				}
 				return m, nil
@@ -786,13 +736,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					loadBooks(m.client, m.selectedTranslation),
 					loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter),
 				)
-			} else if m.mode == modeThemeSelect && m.themeSelected < len(theme.AllThemes()) {
-				// Select theme and update all colors
-				themes := theme.AllThemes()
-				m.currentTheme = themes[m.themeSelected]
-				m.themePinned = true
-				m.mode = modeReader
-				return m, nil
 			} else if m.mode == modeCacheManager && m.translations != nil && m.cacheSelected < len(m.translations) {
 				// Download selected translation
 				translation := m.translations[m.cacheSelected].ShortName
@@ -953,7 +896,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showMillerColumns = false
 				return m, nil
 			}
-			if m.mode == modeSearch || m.mode == modeTranslationSelect || m.mode == modeThemeSelect || m.mode == modeAbout || m.mode == modeComparison || m.mode == modeWordSearch || m.mode == modeCacheManager {
+			if m.mode == modeSearch || m.mode == modeTranslationSelect || m.mode == modeAbout || m.mode == modeComparison || m.mode == modeWordSearch || m.mode == modeCacheManager {
 				// Picker was opened from a comparison column: dismiss
 				// it back into comparison view instead of dropping all
 				// the way down to the reader.
@@ -1151,35 +1094,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case omarchyTickMsg:
-		// Follow the Omarchy desktop theme live while it's the active one.
-		if theme.RefreshOmarchy() && m.currentTheme.Name == theme.OmarchyName {
-			if th, ok := theme.Omarchy(); ok {
-				m.currentTheme = th
-			}
+		// Follow the Omarchy desktop theme live.
+		if theme.RefreshOmarchy() {
+			m.currentTheme = theme.Current()
 		}
 		cmds = append(cmds, omarchyTick())
-
-	case tea.BackgroundColorMsg:
-		// Only act on the first BackgroundColorMsg if the user hasn't
-		// pinned a theme. Pick a sensible default for the terminal's
-		// luma. This runs once at startup (Init asks for the bg color).
-		if !m.themePinned {
-			var chosen theme.Theme
-			if msg.IsDark() {
-				chosen = theme.CatppuccinMocha
-			} else {
-				chosen = theme.CatppuccinLatte
-			}
-			m.currentTheme = chosen
-			// Sync themeSelected so the picker opens on the right row
-			// next time the user presses T.
-			for i, th := range theme.AllThemes() {
-				if th.Name == chosen.Name {
-					m.themeSelected = i
-					break
-				}
-			}
-		}
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -1383,7 +1302,7 @@ func (m Model) viewportSize() (int, int) {
 // on top of the two-pane shell.
 func (m Model) overlayActive() bool {
 	switch m.mode {
-	case modeSearch, modeTranslationSelect, modeThemeSelect,
+	case modeSearch, modeTranslationSelect,
 		modeCacheManager, modeAbout, modeWordSearch:
 		return true
 	}
@@ -1524,7 +1443,7 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 
 	var hs []hint
 	switch m.mode {
-	case modeTranslationSelect, modeThemeSelect:
+	case modeTranslationSelect:
 		hs = []hint{{"↑↓", "navigate"}, {"⏎", "select"}, {"esc", "close"}}
 	case modeCacheManager:
 		hs = []hint{{"↑↓", "navigate"}, {"⏎", "download"}, {"x", "delete"}, {"esc", "close"}}
@@ -1546,7 +1465,6 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 			{"⏎", "open"},
 			{"n/p", "chapter"},
 			{"t", "translation"},
-			{"T", "theme"},
 			{"/", "verse"},
 			{"s", "search"},
 			{"?", "about"},
@@ -1987,14 +1905,6 @@ func (m *Model) overlayClick(row int) tea.Cmd {
 		return nil
 	}
 	switch m.mode {
-	case modeThemeSelect:
-		themes := theme.AllThemes()
-		if row < len(themes) {
-			m.themeSelected = row
-			m.currentTheme = themes[row]
-			m.themePinned = true
-			m.mode = modeReader
-		}
 	case modeTranslationSelect:
 		if m.translations == nil {
 			return nil
@@ -2053,16 +1963,6 @@ func (m *Model) overlayClick(row int) tea.Cmd {
 // overlayNudge moves the selection in the active overlay by delta (±1).
 func (m *Model) overlayNudge(delta int) {
 	switch m.mode {
-	case modeThemeSelect:
-		next := m.themeSelected + delta
-		max := len(theme.AllThemes()) - 1
-		if next < 0 {
-			next = 0
-		}
-		if next > max {
-			next = max
-		}
-		m.themeSelected = next
 	case modeTranslationSelect:
 		if m.translations == nil {
 			return
@@ -2257,8 +2157,6 @@ func (m Model) renderOverlayPanel() string {
 		return m.renderSearchPanel()
 	case modeTranslationSelect:
 		return m.renderTranslationSelect()
-	case modeThemeSelect:
-		return m.renderThemeSelect()
 	case modeCacheManager:
 		return m.renderCacheManager()
 	case modeAbout:
@@ -3201,210 +3099,6 @@ func (m Model) renderCacheManager() string {
 	return containerStyle.Render(content.String())
 }
 
-func (m Model) renderThemeSelect() string {
-	// The picker uses the CURRENTLY APPLIED theme for its own chrome
-	// (title, list, container border) so the picker keeps a stable look
-	// while the user is arrowing through options. The PREVIEW pane uses
-	// the FOCUSED theme (themes[themeSelected]) so the user can see what
-	// they'd be committing to without pressing Enter.
-	chromeBg := m.currentTheme.Background
-
-	themes := theme.AllThemes()
-	listWidth := 24
-	previewWidth := 48
-	innerW := listWidth + 1 + previewWidth // 1-cell gutter between the two halves
-
-	containerStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.currentTheme.BorderActive).
-		BorderBackground(chromeBg).
-		Background(chromeBg).
-		Width(innerW + 4). // +2 padding +2 border
-		Padding(1, 2)
-
-	titleStyle := lipgloss.NewStyle().
-		Foreground(m.currentTheme.Accent).
-		Background(chromeBg).
-		Bold(true)
-
-	// --- Left column: theme list ---
-	listSelectedStyle := lipgloss.NewStyle().
-		Foreground(chromeBg).
-		Background(m.currentTheme.Accent).
-		Bold(true)
-	listNormalStyle := lipgloss.NewStyle().
-		Foreground(m.currentTheme.Primary).
-		Background(chromeBg)
-	listCurrentStyle := lipgloss.NewStyle().
-		Foreground(m.currentTheme.Success).
-		Background(chromeBg)
-
-	padRow := func(s string) string {
-		w := lipgloss.Width(s)
-		if w >= listWidth {
-			return s
-		}
-		return s + lipgloss.NewStyle().Background(chromeBg).Render(strings.Repeat(" ", listWidth-w))
-	}
-
-	// Build the list as a slice of pre-padded rendered rows so we can
-	// row-pair manually with the preview without relying on lipgloss's
-	// JoinHorizontal (which has been mis-pairing rows here when the
-	// preview contains multi-row primitives like the highlight box).
-	var listRows []string
-	listRows = append(listRows, listNormalStyle.Render(padRow(titleStyle.Render("Select Theme"))))
-	listRows = append(listRows, listNormalStyle.Render(padRow("")))
-	for i, thm := range themes {
-		label := thm.Name
-		if lipgloss.Width(label) > listWidth-4 {
-			label = label[:listWidth-4]
-		}
-		isCurrent := thm.Name == m.currentTheme.Name
-		isFocused := i == m.themeSelected
-		var row string
-		switch {
-		case isFocused:
-			text := "▸ " + label
-			if isCurrent {
-				text += " ●"
-			}
-			row = listSelectedStyle.Render(padRow(text))
-		case isCurrent:
-			row = listCurrentStyle.Render(padRow("  " + label + " ●"))
-		default:
-			row = listNormalStyle.Render(padRow("  " + label))
-		}
-		listRows = append(listRows, row)
-	}
-
-	// --- Right column: live preview using the focused theme ---
-	focused := themes[m.themeSelected]
-	previewRows := strings.Split(m.themePreview(focused, previewWidth), "\n")
-	// Drop a trailing empty row that strings.Split produces when the
-	// preview ends with a newline.
-	if len(previewRows) > 0 && previewRows[len(previewRows)-1] == "" {
-		previewRows = previewRows[:len(previewRows)-1]
-	}
-
-	// Equalize heights with bg-styled blank rows.
-	listBlank := listNormalStyle.Render(padRow(""))
-	previewBlank := lipgloss.NewStyle().Background(focused.Background).Width(previewWidth).Render("")
-	for len(listRows) < len(previewRows) {
-		listRows = append(listRows, listBlank)
-	}
-	for len(previewRows) < len(listRows) {
-		previewRows = append(previewRows, previewBlank)
-	}
-
-	// Single-cell gutter in chrome bg between list and preview.
-	gutter := lipgloss.NewStyle().Background(chromeBg).Render(" ")
-
-	var body strings.Builder
-	for i := range listRows {
-		body.WriteString(listRows[i])
-		body.WriteString(gutter)
-		body.WriteString(previewRows[i])
-		if i < len(listRows)-1 {
-			body.WriteByte('\n')
-		}
-	}
-
-	return containerStyle.Render(body.String())
-}
-
-// themePreview renders a small reader-style sample in the given theme,
-// wrapped in its own rounded card so it reads as a self-contained
-// preview of how the reader would look in this theme. The card uses
-// the focused theme for border, background, and every text style.
-func (m Model) themePreview(th theme.Theme, w int) string {
-	bg := th.Background
-	hbg := th.Highlight
-
-	// The card is the full preview block, w cells wide. Its inner
-	// content area is w - 2 (border) - 4 (padding 1,2) = w - 6.
-	inner := w - 6
-	if inner < 14 {
-		inner = 14
-	}
-
-	titleStyle := lipgloss.NewStyle().Foreground(th.Accent).Background(bg).Bold(true)
-	bookStyle := lipgloss.NewStyle().Foreground(th.Success).Background(bg).Bold(true)
-	verseNumStyle := lipgloss.NewStyle().Foreground(th.Warning).Background(bg).Bold(true).Width(4).Align(lipgloss.Right)
-	textStyle := lipgloss.NewStyle().Foreground(th.Primary).Background(bg)
-	mutedStyle := lipgloss.NewStyle().Foreground(th.Muted).Background(bg).Italic(true)
-
-	hlVerseNumStyle := lipgloss.NewStyle().Foreground(th.Accent).Background(hbg).Bold(true).Width(4).Align(lipgloss.Right)
-	hlTextStyle := lipgloss.NewStyle().Foreground(th.Primary).Background(hbg).Bold(true)
-	hlBoxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(th.BorderActive).
-		BorderBackground(bg).
-		Background(hbg).
-		Padding(0, 1)
-
-	// Pad each emitted line out to inner so the entire card interior is
-	// covered with bg cells — no chrome bleed-through.
-	pad := func(s string) string {
-		v := lipgloss.Width(s)
-		if v >= inner {
-			return s
-		}
-		return s + lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", inner-v))
-	}
-	blank := lipgloss.NewStyle().Background(bg).Width(inner).Render("")
-
-	// Sample text widths. textWidth is the visible width of the verse
-	// text. Highlighted box outer = textWidth + 6, so we pull in by 2
-	// extra cells so it never matches inner (lipgloss wraps on exact
-	// width).
-	textWidth := inner - 8
-	if textWidth < 12 {
-		textWidth = 12
-	}
-	clip := func(s string) string {
-		if len(s) > textWidth {
-			s = s[:textWidth-1] + "…"
-		}
-		return s
-	}
-
-	var body strings.Builder
-	body.WriteString(pad(titleStyle.Render(th.Name)) + "\n")
-	body.WriteString(pad(mutedStyle.Render("preview")) + "\n")
-	body.WriteString(blank + "\n")
-	body.WriteString(pad(bookStyle.Render("John 3")) + "\n")
-	body.WriteString(blank + "\n")
-
-	sep := lipgloss.NewStyle().Background(bg).Render("  ")
-
-	v14 := textStyle.Width(textWidth).Render(clip("Moses lifted up the serpent…"))
-	body.WriteString(pad(verseNumStyle.Render("14")+sep+v14) + "\n")
-	body.WriteString(blank + "\n")
-
-	hsep := lipgloss.NewStyle().Background(hbg).Render("  ")
-	hlText := hlTextStyle.Width(textWidth - 4).Render(clip("For God so loved the world…"))
-	hlInner := hlVerseNumStyle.Render("16") + hsep + hlText
-	hl := hlBoxStyle.Render(hlInner)
-	for _, ln := range strings.Split(strings.TrimRight(hl, "\n"), "\n") {
-		body.WriteString(pad(ln) + "\n")
-	}
-	body.WriteString(blank + "\n")
-
-	v17 := textStyle.Width(textWidth).Render(clip("God did not send his Son to condemn…"))
-	body.WriteString(pad(verseNumStyle.Render("17")+sep+v17))
-
-	card := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(th.BorderActive).
-		BorderBackground(bg).
-		Background(bg).
-		Width(w - 2).
-		Padding(1, 2).
-		Render(body.String())
-
-	return card
-}
-
 func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, width int, highlightedVerseStart, highlightedVerseEnd int) string {
 	bg := m.currentTheme.Background
 	hbg := m.currentTheme.Highlight
@@ -4065,7 +3759,6 @@ func (m Model) renderAbout() string {
 		{"s", "search Bible"},
 		{"c", "compare translations"},
 		{"t", "select translation"},
-		{"T", "select theme"},
 		{"d", "download translations"},
 		{"y", "yank current verse"},
 		{"?", "about"},
