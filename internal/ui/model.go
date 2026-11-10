@@ -200,7 +200,7 @@ func NewModel() Model {
 	currentTheme := theme.CatppuccinMocha
 
 	if err == nil {
-		if cfg.SelectedTranslation != "" {
+		if api.ValidTranslationName(cfg.SelectedTranslation) {
 			selectedTranslation = cfg.SelectedTranslation
 		}
 		if cfg.CurrentBook > 0 {
@@ -3791,7 +3791,9 @@ func stripHTMLTags(s string) string {
 	// Trim leading and trailing spaces
 	s = strings.TrimSpace(s)
 
-	return s
+	// Entities decoded above can produce control characters (&#27; is
+	// ESC), so sanitize last.
+	return api.SanitizeText(s)
 }
 
 // fuzzyMatchBook attempts to match a book name or abbreviation to a book ID
