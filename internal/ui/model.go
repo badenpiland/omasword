@@ -385,13 +385,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.String() == "q" && m.typingInInput() {
 				break
 			}
-			// Save settings synchronously before quitting to avoid race condition
-			cfg := settings.Settings{
-				SelectedTranslation: m.selectedTranslation,
-				CurrentBook:         m.currentBook,
-				CurrentChapter:      m.currentChapter,
-			}
-			_ = settings.Save(cfg)
+			_ = m.saveSettings()
 			return m, tea.Quit
 		case "[":
 			if m.mode == modeReader {
@@ -1190,6 +1184,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.content = m.formatChapter(msg.verses, m.currentBookName, m.currentChapter, m.viewport.Width(), m.highlightedVerseStart, m.highlightedVerseEnd)
 		m.viewport.SetContent(m.content)
 
+		// Remember the position now rather than only on "q": closing the
+		// window (Super+W from the Omarchy launcher) ends the process
+		// without a chance to save.
+		if len(msg.verses) > 0 {
+			_ = m.saveSettings()
+		}
+
 		// If we came from a search, scroll to the highlighted verse
 		if cameFromSearch {
 			m.scrollToHighlightedVerse()
@@ -1302,6 +1303,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// saveSettings persists the reading position and translation.
+func (m Model) saveSettings() error {
+	return settings.Save(settings.Settings{
+		SelectedTranslation: m.selectedTranslation,
+		CurrentBook:         m.currentBook,
+		CurrentChapter:      m.currentChapter,
+	})
 }
 
 // typingInInput reports whether key presses are currently going to a text

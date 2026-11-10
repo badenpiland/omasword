@@ -68,7 +68,29 @@ func Save(s Settings) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	return writeFileAtomic(path, data)
+}
+
+// writeFileAtomic writes data to a temp file beside path and renames it into
+// place, so a crash or kill mid-write never leaves a truncated config.
+func writeFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // no-op after a successful rename
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // migrateLegacy copies a sword-tui config.json to path, leaving the original
@@ -82,6 +104,6 @@ func migrateLegacy(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = os.WriteFile(path, data, 0o644)
+	_ = writeFileAtomic(path, data)
 	return data, nil
 }
