@@ -27,6 +27,7 @@ A terminal-based Bible application built with Go, bubbletea, and lipgloss.
   - Solarized Dark / Light
   - Bru Espresso / Latte
   - Jozi Nights / Morning / Midnight
+- **Omarchy Theme Sync**: On [Omarchy](https://omarchy.org), an extra "Omarchy" theme uses your desktop theme's colors and follows `omarchy theme set` live. It's the default on Omarchy; any theme you pick in `T` takes precedence
 - **Auto Light/Dark Detection**: Picks a sensible default based on terminal background
 - **Live Theme Preview**: See a preview card while choosing a theme
 - **Sticky Chapter Header**: Morphs into a scroll indicator as you read

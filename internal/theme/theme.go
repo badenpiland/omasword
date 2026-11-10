@@ -225,9 +225,14 @@ var (
 	}
 )
 
-// AllThemes returns a list of all available themes
+// AllThemes returns a list of all available themes. When an Omarchy
+// desktop theme has been loaded it is listed first.
 func AllThemes() []Theme {
-	return []Theme{
+	var themes []Theme
+	if th, ok := Omarchy(); ok {
+		themes = append(themes, th)
+	}
+	return append(themes, []Theme{
 		CatppuccinMocha,
 		CatppuccinLatte,
 		Dracula,
@@ -240,7 +245,7 @@ func AllThemes() []Theme {
 		JoziNights,
 		JoziMorning,
 		JoziMidnight,
-	}
+	}...)
 }
 
 // GetTheme returns a theme by name, defaulting to Catppuccin Mocha if not found
@@ -258,6 +263,12 @@ func GetTheme(name string) Theme {
 		"jozi-nights":      JoziNights,
 		"jozi-morning":     JoziMorning,
 		"jozi-midnight":    JoziMidnight,
+	}
+
+	if name == "omarchy" {
+		if th, ok := Omarchy(); ok {
+			return th
+		}
 	}
 
 	if theme, ok := themes[name]; ok {

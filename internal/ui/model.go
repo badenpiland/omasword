@@ -199,6 +199,13 @@ func NewModel() Model {
 	currentChapter := 1
 	currentTheme := theme.CatppuccinMocha
 
+	// Pick up the active Omarchy desktop theme, if there is one.
+	theme.RefreshOmarchy()
+	omarchyTheme, onOmarchy := theme.Omarchy()
+	if onOmarchy {
+		currentTheme = omarchyTheme
+	}
+
 	if err == nil {
 		if cfg.SelectedTranslation != "" {
 			selectedTranslation = cfg.SelectedTranslation
@@ -236,7 +243,9 @@ func NewModel() Model {
 		focus:                  paneContent,
 		// If the user had a theme stored in settings, treat it as pinned
 		// so auto-detect from the terminal background doesn't override it.
-		themePinned:            err == nil && cfg.CurrentTheme != "",
+		// On Omarchy, following the desktop theme counts as a choice too,
+		// so the terminal background probe doesn't replace it.
+		themePinned:            (err == nil && cfg.CurrentTheme != "") || onOmarchy,
 		progressBar:            progress.New(progress.WithDefaultBlend(), progress.WithoutPercentage()),
 		comparisonPickerColumn: -1,
 	}
@@ -258,7 +267,25 @@ func (m Model) Init() tea.Cmd {
 		// Ask the terminal for its background color so we can auto-pick
 		// a light or dark default theme if the user hasn't pinned one.
 		tea.RequestBackgroundColor,
+		omarchyTick(),
 	)
+}
+
+// omarchyPollInterval is how often we check whether the Omarchy desktop
+// theme changed (e.g. via `omarchy theme set`).
+const omarchyPollInterval = time.Second
+
+type omarchyTickMsg struct{}
+
+// omarchyTick schedules the next Omarchy theme check. It is a no-op on
+// systems without Omarchy.
+func omarchyTick() tea.Cmd {
+	if theme.OmarchyThemeDir() == "" {
+		return nil
+	}
+	return tea.Tick(omarchyPollInterval, func(time.Time) tea.Msg {
+		return omarchyTickMsg{}
+	})
 }
 
 func loadTranslations(client *api.Client) tea.Cmd {
@@ -1122,6 +1149,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
 		}
+
+	case omarchyTickMsg:
+		// Follow the Omarchy desktop theme live while it's the active one.
+		if theme.RefreshOmarchy() && m.currentTheme.Name == theme.OmarchyName {
+			if th, ok := theme.Omarchy(); ok {
+				m.currentTheme = th
+			}
+		}
+		cmds = append(cmds, omarchyTick())
 
 	case tea.BackgroundColorMsg:
 		// Only act on the first BackgroundColorMsg if the user hasn't
