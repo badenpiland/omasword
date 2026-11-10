@@ -242,6 +242,36 @@ func (m Model) Init() tea.Cmd {
 	)
 }
 
+// setTheme applies th and redraws the reading pane, whose text is
+// pre-rendered with the theme's colors baked in.
+func (m *Model) setTheme(th theme.Theme) {
+	m.currentTheme = th
+	m.rerenderContent()
+}
+
+// rerenderContent rebuilds the viewport content for the current chapter
+// or comparison at the current width and theme, keeping the scroll
+// position.
+func (m *Model) rerenderContent() {
+	if !m.ready {
+		return
+	}
+	w := m.viewport.Width()
+	switch {
+	case m.mode == modeComparison && m.currentParallelVerses != nil:
+		m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, w)
+	case m.currentVerses != nil:
+		m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, w, m.highlightedVerseStart, m.highlightedVerseEnd)
+	case m.currentParallelVerses != nil:
+		m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, w)
+	default:
+		return
+	}
+	y := m.viewport.YOffset()
+	m.viewport.SetContent(m.content)
+	m.viewport.SetYOffset(y)
+}
+
 // omarchyPollInterval is how often we check whether the Omarchy desktop
 // theme changed (e.g. via `omarchy theme set`).
 const omarchyPollInterval = time.Second
@@ -1096,7 +1126,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case omarchyTickMsg:
 		// Follow the Omarchy desktop theme live.
 		if theme.RefreshOmarchy() {
-			m.currentTheme = theme.Current()
+			m.setTheme(theme.Current())
 		}
 		cmds = append(cmds, omarchyTick())
 
@@ -1116,12 +1146,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Reformat content with new width
-		if m.currentVerses != nil {
-			m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, vpW, m.highlightedVerseStart, m.highlightedVerseEnd)
-		} else if m.currentParallelVerses != nil {
-			m.content = m.formatParallelVerses(m.currentParallelVerses, m.comparisonTranslations, m.currentBookName, m.currentChapter, vpW)
-		}
-		m.viewport.SetContent(m.content)
+		m.rerenderContent()
 
 	case translationsLoadedMsg:
 		m.translations = msg.translations
