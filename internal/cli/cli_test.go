@@ -22,7 +22,6 @@ func TestMain(m *testing.M) {
 type fakeBolls struct {
 	verses []api.Verse
 	search *api.SearchResponse
-	books  []api.Book
 	err    error
 	calls  int
 }
@@ -35,10 +34,6 @@ func (f *fakeBolls) GetChapter(string, int, int) ([]api.Verse, error) {
 func (f *fakeBolls) SearchVerses(string, string) (*api.SearchResponse, error) {
 	f.calls++
 	return f.search, f.err
-}
-
-func (f *fakeBolls) GetBooks(string) ([]api.Book, error) {
-	return f.books, nil
 }
 
 type fakeESV struct {
@@ -427,13 +422,11 @@ func TestBSBRequestDoesNotLookUpTheKey(t *testing.T) {
 	}
 }
 
-func TestStrongsNumbersAndApocryphaNames(t *testing.T) {
+func TestStrongsNumbersAreStripped(t *testing.T) {
 	bolls := &fakeBolls{
-		search: &api.SearchResponse{Total: 2, Results: []api.Verse{
+		search: &api.SearchResponse{Total: 1, Results: []api.Verse{
 			{Book: 62, Chapter: 5, Verse: 18, Text: "he that is <mark>begotten</mark><S>1080</S> of<S>1537</S> God<S>2316</S>"},
-			{Book: 71, Chapter: 17, Verse: 18, Text: "Whom, being his firstborn"},
 		}},
-		books: []api.Book{{BookID: 62, Name: "1 John"}, {BookID: 71, Name: "Sirach"}},
 	}
 	opt := options{search: "begotten", translation: "KJV", explicit: true}
 	var out, errBuf bytes.Buffer
@@ -443,8 +436,5 @@ func TestStrongsNumbersAndApocryphaNames(t *testing.T) {
 	got := out.String()
 	if !strings.Contains(got, "1 John 5:18 he that is begotten of God") {
 		t.Errorf("Strong's numbers or tags left in: %s", got)
-	}
-	if !strings.Contains(got, "Sirach 17:18") || strings.Contains(got, "Book 71") {
-		t.Errorf("Apocrypha book not named: %s", got)
 	}
 }

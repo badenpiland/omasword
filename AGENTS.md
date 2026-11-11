@@ -96,8 +96,8 @@ go test ./...
 - `internal/ui`: the Bubble Tea model. The reading pane is pre-rendered
   into `m.content`; color or width changes call `rerenderContent`. Keys
   reach a text input only when `typingInInput` is true. Look books up by
-  `BookID`; IDs are not slice indexes, and KJV and WEB include
-  Apocrypha books numbered above 66.
+  `BookID`; IDs are not slice indexes. Only the 66 books (IDs 1–66) are
+  shown or stored.
 - `internal/theme`: colors from the active Omarchy theme (`colors.toml`
   under `$XDG_STATE_HOME/omarchy/current/theme`, or the older
   `~/.config/omarchy/current/theme`), polled once a second, with Tokyo

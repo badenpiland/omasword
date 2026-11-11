@@ -189,7 +189,6 @@ func resolveDefault(saved, key string) string {
 type bollsAPI interface {
 	GetChapter(translation string, book, chapter int) ([]api.Verse, error)
 	SearchVerses(translation, query string) (*api.SearchResponse, error)
-	GetBooks(translation string) ([]api.Book, error)
 }
 
 type esvAPI interface {
@@ -371,12 +370,8 @@ func runSearch(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient 
 		fmt.Fprintf(stdout, ", %d matches", resp.Total)
 	}
 	fmt.Fprintln(stdout, ")")
-	names := bookNames(opt.translation, bolls)
 	for _, v := range resp.Results {
-		name := names[v.Book]
-		if name == "" {
-			name, _ = esv.BookName(v.Book)
-		}
+		name, _ := esv.BookName(v.Book)
 		if name == "" {
 			name = fmt.Sprintf("Book %d", v.Book)
 		}
@@ -487,24 +482,6 @@ func verseDocs(verses []api.Verse) []verseDoc {
 // search hits, entities, control characters) on one line.
 func plainText(s string) string {
 	return strings.Join(strings.Fields(api.PlainText(s)), " ")
-}
-
-// bookNames maps book IDs to the translation's own names, so the
-// Apocrypha in KJV and WEB search hits are named (Sirach, not "Book 71").
-// ESV, or a failed lookup, falls back to the 66-book canon.
-func bookNames(translation string, bolls bollsAPI) map[int]string {
-	names := map[int]string{}
-	if translation == esv.ID {
-		return names
-	}
-	books, err := bolls.GetBooks(translation)
-	if err != nil {
-		return names
-	}
-	for _, b := range books {
-		names[b.BookID] = b.Name
-	}
-	return names
 }
 
 func redactErr(err error, key string) error {
