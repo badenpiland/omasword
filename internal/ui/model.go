@@ -6,7 +6,6 @@ import (
 	"omasword/internal/settings"
 	"omasword/internal/theme"
 	"omasword/internal/translations"
-	"regexp"
 
 	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/textinput"
@@ -303,21 +302,4 @@ const (
 	leftPaneOuterWidth = 30 // books pane outer width incl. rounded border
 	headerOuterHeight  = 3  // header rounded box: 1 content + 2 border lines
 	statusOuterHeight  = 3  // status bar rounded box: same
-)
-
-// Compiled once: stripHTMLTags runs for every verse on every redraw.
-var (
-	htmlTagRe = regexp.MustCompile(`<[^>]*>`)
-	// strongsRe matches the Strong's concordance numbers bolls.life
-	// puts after words in KJV and ASV ("beginning<S>7225</S>"). The
-	// number goes with the tag, not just the markup around it.
-	strongsRe       = regexp.MustCompile(`(?i)<S>\s*\d*\s*</S>`)
-	numericEntityRe = regexp.MustCompile(`&#(\d+);`)
-	hexEntityRe     = regexp.MustCompile(`&#[xX]([0-9a-fA-F]+);`)
-	spaceRunRe      = regexp.MustCompile(`\s+`)
-
-	// Book identifier alternatives, in order of specificity:
-	// digit + letters ("1 John"), letters ("Song of Solomon"), digits ("1").
-	referenceRe = regexp.MustCompile(`(?i)^(\d+\s*[a-z]+(?:\s+[a-z]+)*|[a-z]+(?:\s+[a-z]+)*|\d+)\s*(.*)$`)
-	digitsRe    = regexp.MustCompile(`\d+`)
 )
