@@ -298,7 +298,11 @@ const (
 
 // Compiled once: stripHTMLTags runs for every verse on every redraw.
 var (
-	htmlTagRe       = regexp.MustCompile(`<[^>]*>`)
+	htmlTagRe = regexp.MustCompile(`<[^>]*>`)
+	// strongsRe matches the Strong's concordance numbers bolls.life
+	// puts after words in KJV and ASV ("beginning<S>7225</S>"). The
+	// number goes with the tag, not just the markup around it.
+	strongsRe       = regexp.MustCompile(`(?i)<S>\s*\d*\s*</S>`)
 	numericEntityRe = regexp.MustCompile(`&#(\d+);`)
 	hexEntityRe     = regexp.MustCompile(`&#[xX]([0-9a-fA-F]+);`)
 	spaceRunRe      = regexp.MustCompile(`\s+`)
