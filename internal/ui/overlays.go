@@ -243,6 +243,11 @@ func (m Model) renderCacheManager() string {
 		content.WriteString(normalStyle.Render("  " + m.translationsLoadingText()))
 	}
 
+	if leftovers := m.leftoverDownloads(); len(leftovers) > 0 {
+		content.WriteString("\n\n" + mutedStyle.Render("No longer offered: "+strings.Join(leftovers, ", ")))
+		content.WriteString("\n" + mutedStyle.Render("Press X to remove them"))
+	}
+
 	// Live download progress bar, rendered just inside the panel below
 	// the list when a download is running. The bubbles/v2/progress bar
 	// is asked for a static view via ViewAs(p) so it doesn't animate

@@ -13,6 +13,19 @@ const (
 	translationItemLines = 2
 )
 
+// leftoverDownloads are downloaded translations that are no longer
+// offered, such as an ESV file saved by an older build. They are never
+// read, but they stay on disk until removed with X in the cache manager.
+func (m Model) leftoverDownloads() []string {
+	var out []string
+	for _, name := range m.cachedTranslations {
+		if !translations.IsBuiltin(name) && api.ValidTranslationName(name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // presentTranslations keeps the public-domain allowlist, in catalog order,
 // with the short catalog names. Anything else in the server list (ESV,
 // NLT, and the other copyrighted texts bolls.life hosts) is dropped.

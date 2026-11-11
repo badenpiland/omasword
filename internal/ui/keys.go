@@ -383,6 +383,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			}
 			return m, nil, true
 		}
+	case "X":
+		// Remove every downloaded translation that is no longer offered.
+		if m.mode == modeCacheManager && m.cache != nil {
+			leftovers := m.leftoverDownloads()
+			if len(leftovers) == 0 {
+				return m, nil, true
+			}
+			for _, name := range leftovers {
+				if err := m.cache.RemoveTranslation(name); err != nil {
+					m.err = err
+					break
+				}
+			}
+			return m, loadCachedList(m.cache), true
+		}
 	case "esc":
 		if m.mode == modeCacheManager {
 			m.mode = modeReader
