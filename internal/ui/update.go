@@ -258,7 +258,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case translationsLoadedMsg:
-		m.translations = msg.translations
+		m.translations = presentTranslations(msg.translations)
 		m.translationsErr, m.translationsRetries = nil, 0
 
 	case booksLoadedMsg:

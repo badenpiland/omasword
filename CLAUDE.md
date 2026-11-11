@@ -5,8 +5,10 @@ Guidance for Claude Code when working in this repository.
 ## Project
 
 omasword is a terminal Bible reader for Omarchy, written in Go on the charm
-v2 stack (Bubble Tea, Bubbles, Lip Gloss). Bible data comes from the
-bolls.life API, with optional offline translation downloads. It is a fork of
+v2 stack (Bubble Tea, Bubbles, Lip Gloss). Built-in Bible text comes from
+the bolls.life API and is limited to public-domain translations, defaulting
+to the Berean Standard Bible (BSB), with optional offline downloads of those
+same texts. Copyrighted translations are not fetched or cached. It is a fork of
 [kmf/sword-tui](https://github.com/kmf/sword-tui) (GPL-2.0-or-later).
 
 ## Build and test
@@ -20,9 +22,13 @@ go test ./...
 ## Layout
 
 - `cmd/omasword/main.go`: flags (`--version`), cache setup, starts the program.
+- `internal/translations`: public-domain allowlist (BSB, KJV, WEB, ASV, YLT,
+ Geneva, Douay-Rheims). The bolls client and the offline cache both refuse
+ anything else.
 - `internal/api`: bolls.life HTTP client. Everything it returns is untrusted:
-  text goes through `SanitizeText` (strips terminal control characters) and
-  translation names through `ValidTranslationName` before use in URLs or paths.
+ text goes through `SanitizeText` (strips terminal control characters) and
+ translation names through `ValidTranslationName` before use in URLs or paths.
+ Requests are limited to the allowlist.
 - `internal/cache`: offline translations in `~/.cache/omasword/translations`;
   downloads are size-capped and written via temp file + rename.
 - `internal/settings`: `~/.config/omasword/config.json` (translation, book,

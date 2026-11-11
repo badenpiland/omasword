@@ -20,10 +20,10 @@ distributed under the same GPL-2.0-or-later license; see [License](#license).
 - **Keyboard-Driven**: Full keyboard navigation with vim-like bindings
 
 ### Bible Access
-- **Multiple Translations**: Switch between English translations on the fly
+- **Multiple Translations**: Switch between public-domain English translations (Berean Standard Bible by default)
 - **Side-by-Side Comparison**: Per-column translation pickers for parallel reading
 - **Verse Lookup**: Jump directly to any book, chapter, and verse
-- **Offline Cache**: Automatic caching with a real byte-level progress bar for downloads
+- **Offline Cache**: Download public-domain translations, with a byte-level progress bar
 - **Persistent State**: Translation and last-read position survive restarts
 
 ### User Interface
@@ -112,9 +112,15 @@ omasword
 - `esc` - Close overlay / cancel
 - `q`, `Ctrl-C` - Quit
 
+## Translations and licensing
+
+The default translation is the **Berean Standard Bible (BSB)**. [bolls.life](https://bolls.life/api/) serves it, and it has been public domain since 2023: modern, word-for-word English, and the closest built-in text to the reading level of recent evangelical translations. The picker also offers the other public-domain texts that API hosts — KJV, WEB, ASV, YLT, the Geneva Bible, and the Douay-Rheims — each with a one-line description of how it reads. Darby is public domain, but bolls.life does not host it, so it is not listed. A public-domain text that is not hosted there can be added later from the publisher's own files.
+
+Copyrighted translations are not fetched or cached. That includes the ESV (Crossway), the NLT (Tyndale), and the CSB (Holman). A saved config or an older download that still names one of them opens the BSB instead of failing.
+
 ## API
 
-Uses the [bolls.life API](https://bolls.life/api/) for Bible data.
+Built-in texts come from the [bolls.life API](https://bolls.life/api/).
 
 ## License
 

@@ -4,6 +4,7 @@ import (
 	"omasword/internal/api"
 	"omasword/internal/settings"
 	"omasword/internal/theme"
+	"omasword/internal/translations"
 	"regexp"
 
 	"charm.land/bubbles/v2/progress"
@@ -183,17 +184,24 @@ func NewModel() Model {
 	// --- Load persisted settings (if any) ---
 	cfg, err := settings.Load()
 
-	selectedTranslation := "ESV"
+	selectedTranslation := translations.Default
 	currentBook := 1
 	currentChapter := 1
+	// A config saved by an older build may name ESV, NLT, or another
+	// copyrighted translation. Open the public-domain default instead
+	// of requesting a text we will not serve, and rewrite the config
+	// so the next launch does not keep pointing at it.
+	fellBack := false
 
 	// Colors always follow the active Omarchy desktop theme.
 	theme.RefreshOmarchy()
 	currentTheme := theme.Current()
 
 	if err == nil {
-		if api.ValidTranslationName(cfg.SelectedTranslation) {
+		if translations.IsBuiltin(cfg.SelectedTranslation) {
 			selectedTranslation = cfg.SelectedTranslation
+		} else if cfg.SelectedTranslation != "" {
+			fellBack = true
 		}
 		if cfg.CurrentBook > 0 {
 			currentBook = cfg.CurrentBook
@@ -203,7 +211,7 @@ func NewModel() Model {
 		}
 	}
 
-	return Model{
+	m := Model{
 		client:                 api.NewClient(),
 		textInput:              ti,
 		pickerFilterInput:      pickerFilter,
@@ -213,12 +221,16 @@ func NewModel() Model {
 		currentChapter:         currentChapter,
 		currentBookName:        fallbackBookName(currentBook), // replaced when books load
 		mode:                   modeReader,
-		comparisonTranslations: []string{"ESV", "KJV", "NLT"},
+		comparisonTranslations: translations.Comparison(),
 		currentTheme:           currentTheme,
 		focus:                  paneContent,
 		progressBar:            progress.New(progress.WithDefaultBlend(), progress.WithoutPercentage()),
 		comparisonPickerColumn: -1,
 	}
+	if fellBack {
+		_ = m.saveSettings()
+	}
+	return m
 }
 
 func (m *Model) SetCache(cache CacheInterface) {
