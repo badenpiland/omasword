@@ -9,17 +9,17 @@ import (
 	"time"
 )
 
-const sampleText = "" +
-	"[1] The vision of Obadiah. [2] Behold, I will make you small.\n" +
-	"[3] The pride of your heart has deceived you.\n" +
-	"[4] Though you soar aloft like the eagle.\n" +
-	"[5] If thieves came to you.\n" +
-	"[6] How you have been pillaged.\n" +
-	"[7] All your allies have driven you.\n" +
-	"[8] Will I not on that day.\n" +
-	"[9] And your mighty men shall be dismayed.\n" +
-	"[10] Because of the violence done to your brother.\n" +
-	"[11] On the day that you stood aloof. ESV ® Bible. Please visit our permission site .\n"
+// obadiahChapter is 21 verses, the shape api.esv.org returns for
+// "Obadiah 1:1-21". A bare "Obadiah 1" is only verse 1.
+var obadiahChapter = func() string {
+	var b strings.Builder
+	b.WriteString("[1] The vision of Obadiah. [2] Behold, I will make you small.\n")
+	for i := 3; i <= 21; i++ {
+		fmt.Fprintf(&b, "[%d] Obadiah fixture verse %d.\n", i, i)
+	}
+	b.WriteString("ESV ® Bible. Please visit our permission site .\n")
+	return b.String()
+}()
 
 func TestChapterClipsCachesAndHidesTheKey(t *testing.T) {
 	const key = "test-key-not-real"
@@ -39,7 +39,17 @@ func TestChapterClipsCachesAndHidesTheKey(t *testing.T) {
 		if q.Get("include-verse-numbers") != "true" || q.Get("include-copyright") != "false" || q.Get("include-footnotes") != "false" || q.Get("include-headings") != "false" {
 			t.Errorf("query = %s", r.URL.RawQuery)
 		}
-		fmt.Fprintf(w, `{"passages":[%q]}`, sampleText)
+		// Crossway reads "Obadiah 1" as verse 1. Only the explicit range
+		// is the chapter.
+		switch q.Get("q") {
+		case "Obadiah 1":
+			fmt.Fprintf(w, `{"passages":["[1] The vision of Obadiah."]}`)
+		case "Obadiah 1:1-21":
+			fmt.Fprintf(w, `{"passages":[%q]}`, obadiahChapter)
+		default:
+			t.Errorf("query q = %q", q.Get("q"))
+			fmt.Fprintf(w, `{"passages":["[1] The vision of Obadiah."]}`)
+		}
 	}))
 	defer srv.Close()
 

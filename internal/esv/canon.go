@@ -1,6 +1,10 @@
 package esv
 
-import "omasword/internal/api"
+import (
+	"fmt"
+
+	"omasword/internal/api"
+)
 
 // book is one Protestant canon book. verses is the traditional verse
 // total (the Bible's 31,102). ESV 3 John has 15 verses rather than 14;
@@ -122,6 +126,27 @@ func verseCount(bookID int) int {
 		return 0
 	}
 	return canon[bookID-1].verses
+}
+
+func chapterCount(bookID int) int {
+	if bookID < 1 || bookID > len(canon) {
+		return 0
+	}
+	return canon[bookID-1].chapters
+}
+
+// passageQuery is the api.esv.org reference for one chapter.
+// Single-chapter books are requested as an explicit verse range:
+// Crossway reads "Obadiah 1" as verse 1, not as the chapter.
+func passageQuery(bookID, chapter int) (string, bool) {
+	name, ok := BookName(bookID)
+	if !ok || chapter < 1 || chapter > chapterCount(bookID) {
+		return "", false
+	}
+	if chapterCount(bookID) == 1 {
+		return fmt.Sprintf("%s 1:1-%d", name, verseCount(bookID)), true
+	}
+	return fmt.Sprintf("%s %d", name, chapter), true
 }
 
 // BookName is the English name used in an api.esv.org passage query.

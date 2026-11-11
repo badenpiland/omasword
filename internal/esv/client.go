@@ -176,8 +176,7 @@ func (c *Client) Chapter(bookID, chapter, startVerse int) (Passage, error) {
 	if !c.HasKey() {
 		return Passage{}, ErrNoKey
 	}
-	name, ok := BookName(bookID)
-	if !ok || chapter < 1 {
+	if _, ok := passageQuery(bookID, chapter); !ok {
 		return Passage{}, fmt.Errorf("unknown passage %d:%d", bookID, chapter)
 	}
 	if startVerse < 1 {
@@ -189,7 +188,7 @@ func (c *Client) Chapter(bookID, chapter, startVerse int) (Passage, error) {
 		p.Notice = c.Notice()
 		return p, nil
 	}
-	all, notice, err := c.fetchChapter(name, chapter)
+	all, notice, err := c.fetchChapter(bookID, chapter)
 	if err != nil {
 		return Passage{}, err
 	}
@@ -200,6 +199,12 @@ func (c *Client) Chapter(bookID, chapter, startVerse int) (Passage, error) {
 		page.Verses[i].Book = bookID
 		page.Verses[i].Chapter = chapter
 		page.Verses[i].Translation = ID
+	}
+	// A one-verse reply to a single-chapter book is what Crossway returns
+	// for "Obadiah 1". Don't store that as the chapter, or later verses
+	// stay missing until the cache entry expires.
+	if !coversChapter(bookID, all) {
+		return page, nil
 	}
 	if err := c.cache.Put(bookID, chapter, len(all), page.Verses, notice); err != nil {
 		return Passage{}, err
@@ -260,9 +265,36 @@ func (c *Client) Search(query string) (*api.SearchResponse, error) {
 	return resp, nil
 }
 
-func (c *Client) fetchChapter(name string, chapter int) ([]api.Verse, string, error) {
+// coversChapter reports whether verses are the whole chapter. For a
+// single-chapter book that means every verse through the canon total.
+// Anything shorter is a partial reply and must not be cached as the chapter.
+func coversChapter(bookID int, verses []api.Verse) bool {
+	if len(verses) == 0 {
+		return false
+	}
+	if chapterCount(bookID) != 1 {
+		return true
+	}
+	want := verseCount(bookID)
+	if len(verses) < want {
+		return false
+	}
+	last := 0
+	for _, v := range verses {
+		if v.Verse > last {
+			last = v.Verse
+		}
+	}
+	return last >= want
+}
+
+func (c *Client) fetchChapter(bookID, chapter int) ([]api.Verse, string, error) {
+	query, ok := passageQuery(bookID, chapter)
+	if !ok {
+		return nil, "", fmt.Errorf("unknown passage %d:%d", bookID, chapter)
+	}
 	q := url.Values{}
-	q.Set("q", fmt.Sprintf("%s %d", name, chapter))
+	q.Set("q", query)
 	// The text endpoint puts a [N] marker on every verse, including ones
 	// that share a paragraph. The HTML endpoint only tags the first verse
 	// of a paragraph, which glued the rest of the paragraph into that verse.
