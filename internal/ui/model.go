@@ -38,12 +38,18 @@ type Model struct {
 	textInput textinput.Model
 	// searchErr explains why the last verse lookup was rejected; shown
 	// in the lookup panel until the next attempt.
-	searchErr              error
-	translations           []api.Translation
-	selectedTranslation    string
-	currentBook            int
-	currentChapter         int
-	currentBookName        string
+	searchErr           error
+	translations        []api.Translation
+	selectedTranslation string
+	currentBook         int
+	currentChapter      int
+	currentBookName     string
+	// Book and translation list loading; failures retry with backoff.
+	booksErr               error
+	booksRetries           int
+	translationsErr        error
+	translationsRetries    int
+	chapterRetries         int
 	books                  []api.Book
 	content                string
 	mode                   viewMode
@@ -205,7 +211,7 @@ func NewModel() Model {
 		selectedTranslation:    selectedTranslation,
 		currentBook:            currentBook,
 		currentChapter:         currentChapter,
-		currentBookName:        "Genesis", // corrected after books load
+		currentBookName:        fallbackBookName(currentBook), // replaced when books load
 		mode:                   modeReader,
 		comparisonTranslations: []string{"ESV", "KJV", "NLT"},
 		currentTheme:           currentTheme,

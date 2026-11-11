@@ -35,7 +35,7 @@ func loadTranslations(client *api.Client) tea.Cmd {
 	return func() tea.Msg {
 		translations, err := client.GetTranslations()
 		if err != nil {
-			return errMsg{err}
+			return translationsFailedMsg{err}
 		}
 		return translationsLoadedMsg{translations}
 	}
@@ -45,7 +45,7 @@ func loadBooks(client *api.Client, translation string) tea.Cmd {
 	return func() tea.Msg {
 		books, err := client.GetBooks(translation)
 		if err != nil {
-			return errMsg{err}
+			return booksFailedMsg{err}
 		}
 		return booksLoadedMsg{books}
 	}
@@ -55,7 +55,7 @@ func loadChapter(client *api.Client, translation string, book, chapter int) tea.
 	return func() tea.Msg {
 		verses, err := client.GetChapter(translation, book, chapter)
 		if err != nil {
-			return errMsg{err}
+			return chapterFailedMsg{book: book, chapter: chapter, err: err}
 		}
 		return chapterLoadedMsg{verses}
 	}

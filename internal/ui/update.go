@@ -252,16 +252,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reformat content with new width
 		m.rerenderContent()
 
+	case booksFailedMsg, retryBooksMsg, translationsFailedMsg, retryTranslationsMsg,
+		chapterFailedMsg, retryChapterMsg:
+		cmd, _ := m.handleListLoad(msg)
+		cmds = append(cmds, cmd)
+
 	case translationsLoadedMsg:
 		m.translations = msg.translations
+		m.translationsErr, m.translationsRetries = nil, 0
 
 	case booksLoadedMsg:
-		// A successful load means the earlier error no longer applies.
-		m.err = nil
 		m.books = msg.books
-		for _, book := range m.books {
+		m.booksErr, m.booksRetries = nil, 0
+		for i, book := range m.books {
 			if book.BookID == m.currentBook {
 				m.currentBookName = book.Name
+				m.sidebarSelected = i
 				break
 			}
 		}
@@ -269,6 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chapterLoadedMsg:
 		// A successful load means the earlier error no longer applies.
 		m.err = nil
+		m.chapterRetries = 0
 		m.loading = false
 		m.currentVerses = msg.verses
 		m.currentParallelVerses = nil
