@@ -114,7 +114,8 @@ func TestRefreshOmarchyDetectsChanges(t *testing.T) {
 		omarchyTheme, omarchyRaw = nil, nil
 	})
 
-	if RefreshOmarchy() || OmarchyAvailable() {
+	changed := RefreshOmarchy()
+	if _, loaded := Omarchy(); changed || loaded {
 		t.Fatal("no theme should be loaded without colors.toml")
 	}
 
@@ -148,7 +149,8 @@ func TestRefreshOmarchyDetectsChanges(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "colors.toml")); err != nil {
 		t.Fatal(err)
 	}
-	if !RefreshOmarchy() || OmarchyAvailable() {
+	changed = RefreshOmarchy()
+	if _, loaded := Omarchy(); !changed || loaded {
 		t.Fatal("removing Omarchy should drop the theme")
 	}
 	if got := hexOf(Current().Background); got != "1a1b26" {
