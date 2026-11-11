@@ -102,7 +102,7 @@ omasword
 - `PgUp` / `PgDn` - Previous / next chapter (same as `p` / `n`)
 - `/` - Search by verse reference
 - `s` - Word search
-- `v` - Toggle Miller-columns picker (Books → Chapters → Verses)
+- `v` - Browse to a passage: Books → Chapters → Verses columns (`/` filters a column, `Enter` opens the verse)
 - `c` - Comparison view (side-by-side translations)
 - `t` - Translation picker
 - `d` - Cache manager (`x` deletes a cached translation here)

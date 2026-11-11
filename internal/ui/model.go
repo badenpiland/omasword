@@ -22,6 +22,7 @@ const (
 	modeCacheManager
 	modeAbout
 	modeWordSearch
+	modePicker // "v": Books → Chapters → Verses browser
 )
 
 type focusPane int
@@ -57,17 +58,20 @@ type Model struct {
 	currentParallelVerses  map[string][]api.Verse
 	highlightedVerseStart  int // Start of highlighted verse range
 	highlightedVerseEnd    int // End of highlighted verse range
-	// Miller columns state
-	millerColumn         int // 0=books, 1=chapters, 2=verses
-	millerBookIdx        int
-	millerChapterIdx     int
-	millerVerseIdx       int
-	showMillerColumns    bool
-	millerFilterInput    textinput.Model
-	millerFilter         string
-	millerFilteredBooks  []api.Book
-	millerFilteredVerses []api.Verse
-	millerFilterMode     bool // When true, all keys go to filter input
+	// "v" picker state. Selections are tracked by value (book ID, chapter
+	// and verse number) rather than list index so a filter can't leave
+	// them pointing at the wrong item.
+	pickerColumn        int
+	pickerBook          int
+	pickerChapter       int
+	pickerVerse         int
+	pickerFilterInput   textinput.Model
+	pickerFiltering     bool
+	pickerVerses        []api.Verse // verses of pickerVersesBook/Chapter
+	pickerVersesBook    int
+	pickerVersesChapter int
+	pickerVersesLoading bool
+	pickerVersesErr     error
 	// Cache management state
 	cache                  CacheInterface
 	cachedTranslations     []string
@@ -159,10 +163,11 @@ func NewModel() Model {
 	ti.CharLimit = 50
 	ti.SetWidth(50)
 
-	millerFilter := textinput.New()
-	millerFilter.Placeholder = "Type to filter..."
-	millerFilter.CharLimit = 50
-	millerFilter.SetWidth(25)
+	pickerFilter := textinput.New()
+	pickerFilter.Prompt = ""
+	pickerFilter.Placeholder = "type to filter"
+	pickerFilter.CharLimit = 40
+	pickerFilter.SetWidth(24)
 
 	wordSearch := textinput.New()
 	wordSearch.Placeholder = "Search the Bible..."
@@ -195,7 +200,7 @@ func NewModel() Model {
 	return Model{
 		client:                 api.NewClient(),
 		textInput:              ti,
-		millerFilterInput:      millerFilter,
+		pickerFilterInput:      pickerFilter,
 		wordSearchInput:        wordSearch,
 		selectedTranslation:    selectedTranslation,
 		currentBook:            currentBook,

@@ -41,7 +41,7 @@ func (m Model) viewportSize() (int, int) {
 func (m Model) overlayActive() bool {
 	switch m.mode {
 	case modeSearch, modeTranslationSelect,
-		modeCacheManager, modeAbout, modeWordSearch:
+		modeCacheManager, modeAbout, modeWordSearch, modePicker:
 		return true
 	}
 	return false
@@ -200,6 +200,12 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 		hs = []hint{{"↑↓", "scroll"}, {"r", "reader"}, {"esc", "back"}}
 	case modeSearch:
 		hs = []hint{{"⏎", "go"}, {"esc", "cancel"}}
+	case modePicker:
+		if m.pickerFiltering {
+			hs = []hint{{"⏎", "keep filter"}, {"esc", "clear"}}
+		} else {
+			hs = []hint{{"↑↓", "move"}, {"←→", "column"}, {"/", "filter"}, {"⏎", "open"}, {"esc", "close"}}
+		}
 	default:
 		hs = []hint{
 			{"tab", "focus"},
@@ -495,18 +501,7 @@ func (m Model) composeOverlay(base string) string {
 	}
 	panelW := lipgloss.Width(panel)
 	panelH := lipgloss.Height(panel)
-
-	// Center over the right pane
-	rightX := leftPaneOuterWidth
-	rightW := m.width - rightX
-	x := rightX + (rightW-panelW)/2
-	y := (m.height-panelH)/2 + 1
-	if x < 1 {
-		x = 1
-	}
-	if y < 1 {
-		y = 1
-	}
+	x, y := m.overlayOrigin(panelW, panelH)
 
 	shadowStyle := lipgloss.NewStyle().
 		Background(m.currentTheme.Shadow).
@@ -528,6 +523,18 @@ func (m Model) composeOverlay(base string) string {
 	return canvas.Render()
 }
 
+// overlayOrigin places a panel centered over the right pane, or over the
+// whole window when it is too wide for the right pane.
+func (m Model) overlayOrigin(panelW, panelH int) (x, y int) {
+	rightX := leftPaneOuterWidth
+	x = rightX + (m.width-rightX-panelW)/2
+	if x+panelW > m.width {
+		x = (m.width - panelW) / 2
+	}
+	y = (m.height-panelH)/2 + 1
+	return max(x, 1), max(y, 1)
+}
+
 func (m Model) renderOverlayPanel() string {
 	switch m.mode {
 	case modeSearch:
@@ -540,6 +547,8 @@ func (m Model) renderOverlayPanel() string {
 		return m.renderAbout()
 	case modeWordSearch:
 		return m.renderWordSearch()
+	case modePicker:
+		return m.renderPicker()
 	}
 	return ""
 }
