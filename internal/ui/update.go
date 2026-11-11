@@ -124,7 +124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-					return m, nil
+					return m, m.checkESVKey()
 				}
 			}
 		}
@@ -263,6 +263,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		chapterFailedMsg, retryChapterMsg:
 		cmd, _ := m.handleListLoad(msg)
 		cmds = append(cmds, cmd)
+
+	case esvKeyResolvedMsg:
+		if msg.key != "" && m.esvClient != nil && !m.esvClient.HasKey() {
+			m.esvClient.SetKey(msg.key)
+		}
 
 	case translationsLoadedMsg:
 		m.translations = presentTranslations(msg.translations)

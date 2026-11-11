@@ -62,11 +62,11 @@ func TestSingleChapterQueriesUseVerseRanges(t *testing.T) {
 	}
 
 	want := []string{
-		"Obadiah 1:1-21",
-		"Philemon 1:1-25",
-		"2 John 1:1-13",
-		"3 John 1:1-14",
-		"Jude 1:1-25",
+		"Obadiah",
+		"Philemon",
+		"2 John",
+		"3 John",
+		"Jude",
 		"John 3",
 	}
 	if strings.Join(got, " | ") != strings.Join(want, " | ") {
@@ -79,7 +79,7 @@ func TestPartialSingleChapterIsNotCached(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits++
-		if r.URL.Query().Get("q") != "Obadiah 1:1-21" {
+		if r.URL.Query().Get("q") != "Obadiah" {
 			t.Errorf("query = %q", r.URL.Query().Get("q"))
 		}
 		// Short reply: do not treat this as the whole chapter.

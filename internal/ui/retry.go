@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"errors"
 	"time"
+
+	"omasword/internal/esv"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -51,9 +54,15 @@ func (m *Model) handleListLoad(msg tea.Msg) (cmd tea.Cmd, ok bool) {
 	case chapterFailedMsg:
 		m.err = msg.err
 		m.loading = false
-		// Keep retrying only while that chapter is still the one you're on.
-		if msg.book == m.currentBook && msg.chapter == m.currentChapter {
-			cmd = retryAfter(listRetryDelay(m.chapterRetries), retryChapterMsg{msg.book, msg.chapter})
+		// Keep retrying only while that chapter is still the one you're
+		// on, and only when trying again can help.
+		if msg.book == m.currentBook && msg.chapter == m.currentChapter && retryableChapterErr(msg.err) {
+			delay := listRetryDelay(m.chapterRetries)
+			var rate *esv.RateError
+			if errors.As(msg.err, &rate) {
+				delay = max(delay, rate.RetryAfter)
+			}
+			cmd = retryAfter(delay, retryChapterMsg{msg.book, msg.chapter})
 			m.chapterRetries++
 		}
 	case retryChapterMsg:
@@ -65,4 +74,11 @@ func (m *Model) handleListLoad(msg tea.Msg) (cmd tea.Cmd, ok bool) {
 		return nil, false
 	}
 	return cmd, true
+}
+
+// retryableChapterErr is false for a missing or rejected ESV key: the
+// same request would fail again, and a rejected key would keep calling
+// Crossway every 30 seconds.
+func retryableChapterErr(err error) bool {
+	return !errors.Is(err, esv.ErrNoKey) && !errors.Is(err, esv.ErrKeyRejected)
 }

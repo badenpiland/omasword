@@ -141,9 +141,27 @@ func (m Model) loadPickerChapter(book, chapter int) tea.Cmd {
 	}
 }
 
+// esvKeyResolvedMsg carries a key looked up in the background.
+type esvKeyResolvedMsg struct{ key string }
+
+// checkESVKey looks the key up once, off the UI thread, so the picker can
+// say whether ESV is ready. It returns nil after the first call.
+func (m *Model) checkESVKey() tea.Cmd {
+	if m.esvKeyChecked {
+		return nil
+	}
+	m.esvKeyChecked = true
+	keyCmd := m.esvKeyCmd
+	return func() tea.Msg { return esvKeyResolvedMsg{esv.Resolve(keyCmd)} }
+}
+
 // chooseTranslation switches the reader, or a comparison column, to name.
 // ESV without a key opens the key wizard instead of calling an API.
 func (m Model) chooseTranslation(name string) (Model, tea.Cmd) {
+	if name == esv.ID && !m.esvKeyChecked {
+		// Chosen before the background lookup finished.
+		m.refreshESVKey()
+	}
 	if name == esv.ID && (m.esvClient == nil || !m.esvClient.HasKey()) {
 		m.mode = modeESVKey
 		m.esvKeyThenSelect = true
@@ -212,6 +230,7 @@ func (m Model) commitESVKey() (Model, tea.Cmd) {
 // value stays in the client for this process. It is not saved.
 func (m *Model) refreshESVKey() {
 	key := esv.Resolve(m.esvKeyCmd)
+	m.esvKeyChecked = true
 	if m.esvClient == nil {
 		m.esvClient, _ = esv.New(key, esv.DefaultCacheDir())
 		return

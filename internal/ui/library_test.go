@@ -238,11 +238,7 @@ func TestESVWizardStoresAndRemovesTheKey(t *testing.T) {
 	if info.Mode().Perm() != 0o644 {
 		t.Fatalf("config mode = %o, want 644 after removal", info.Mode().Perm())
 	}
-	got, err := settings.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.LegacyESVAPIKey != "" || esv.Resolve("") != "" {
+	if esv.Resolve("") != "" {
 		t.Fatal("removed key is still stored")
 	}
 }
@@ -280,36 +276,6 @@ func TestWizardRefusesToSaveWithoutAKeyring(t *testing.T) {
 	}
 }
 
-func TestLegacyConfigKeyIsMigratedOnStartup(t *testing.T) {
-	keyring.MockInit()
-	t.Setenv("OMASWORD_ESV_API_KEY", "")
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	cfgDir := filepath.Join(dir, "omasword")
-	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := []byte(`{"selected_translation":"ESV","current_book":43,"current_chapter":16,"esv_api_key":"test-key-not-real"}`)
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	m := NewModel()
-	if m.selectedTranslation != esv.ID || !m.esvClient.HasKey() {
-		t.Fatalf("translation %s hasKey %v", m.selectedTranslation, m.esvClient != nil && m.esvClient.HasKey())
-	}
-	if m.startupNote != esv.MigrationOKNotice {
-		t.Fatalf("note = %q", m.startupNote)
-	}
-	data, err := os.ReadFile(filepath.Join(cfgDir, "config.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), "test-key-not-real") || strings.Contains(string(data), "esv_api_key") {
-		t.Fatalf("migrated config still has the key: %s", data)
-	}
-}
-
 func TestESVChapterShowsCopyrightAndLink(t *testing.T) {
 	t.Setenv("OMASWORD_ESV_API_KEY", "")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -327,5 +293,35 @@ func TestESVChapterShowsCopyrightAndLink(t *testing.T) {
 	}
 	if !strings.Contains(out, "Showing verses 1") {
 		t.Fatal("clipped chapter should say which verses are on the page")
+	}
+}
+
+func TestKeyIsNotLookedUpUntilAPickerOpens(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := esv.SaveKey("test-key-not-real"); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.Save(settings.Settings{SelectedTranslation: "BSB", CurrentBook: 43, CurrentChapter: 3}); err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel()
+	if m.esvKeyChecked || m.esvClient.HasKey() {
+		t.Fatal("key was looked up at launch while reading BSB")
+	}
+	next, cmd, _ := m.handleKey(tea.KeyPressMsg{Code: 't', Text: "t"})
+	if cmd == nil {
+		t.Fatal("opening the picker did not look up the key")
+	}
+	updated, _ := next.Update(cmd())
+	if !updated.(Model).esvClient.HasKey() {
+		t.Fatal("key from the keyring was not picked up")
+	}
+	reopened := updated.(Model)
+	reopened.mode = modeReader
+	if _, again, _ := reopened.handleKey(tea.KeyPressMsg{Code: 't', Text: "t"}); again != nil {
+		t.Fatal("key was looked up a second time")
 	}
 }

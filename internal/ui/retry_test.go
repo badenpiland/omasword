@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"omasword/internal/api"
+	"omasword/internal/esv"
 	"omasword/internal/settings"
 
 	tea "charm.land/bubbletea/v2"
@@ -84,5 +85,26 @@ func TestCurrentChapterFailureRetries(t *testing.T) {
 	}
 	if _, cmd := m.Update(retryChapterMsg{book: 1, chapter: 1}); cmd != nil {
 		t.Fatal("reloaded a chapter that is no longer current")
+	}
+}
+
+func TestESVKeyErrorsAreNotRetried(t *testing.T) {
+	for _, err := range []error{esv.ErrNoKey, esv.ErrKeyRejected} {
+		m := Model{currentBook: 43, currentChapter: 3}
+		cmd, ok := m.handleListLoad(chapterFailedMsg{book: 43, chapter: 3, err: err})
+		if !ok || cmd != nil {
+			t.Errorf("%v: got a retry, want none", err)
+		}
+		if m.err != err {
+			t.Errorf("%v: error not shown", err)
+		}
+	}
+}
+
+func TestESVRateLimitWaitsItOut(t *testing.T) {
+	m := Model{currentBook: 43, currentChapter: 3}
+	cmd, _ := m.handleListLoad(chapterFailedMsg{book: 43, chapter: 3, err: &esv.RateError{RetryAfter: time.Hour}})
+	if cmd == nil {
+		t.Fatal("rate limit was not retried")
 	}
 }

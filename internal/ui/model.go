@@ -128,7 +128,7 @@ type Model struct {
 	// is not written to config. esvKeyCmd is the command string only.
 	esvClient        *esv.Client
 	esvKeyCmd        string
-	startupNote      string
+	esvKeyChecked    bool // the keyring and esv_api_key_cmd were consulted
 	esvPageBook      int
 	esvPageChapter   int
 	esvPageStart     int
@@ -219,8 +219,14 @@ func NewModel() Model {
 	// serve, and rewrite the config so the next launch does not keep
 	// pointing at it. ESV is kept when a key resolves from the keyring,
 	// esv_api_key_cmd, or a one-shot OMASWORD_ESV_API_KEY.
+	//
+	// The key is looked up here only when ESV is the saved translation.
+	// Otherwise the lookup waits until a translation picker opens, so a
+	// BSB reader never touches the keyring or runs esv_api_key_cmd (which
+	// may prompt for a password) at launch.
 	keyCmd := ""
-	startupNote := ""
+	savedKey := ""
+	esvKeyChecked := false
 	fellBack := false
 
 	// Colors always follow the active Omarchy desktop theme.
@@ -229,11 +235,14 @@ func NewModel() Model {
 
 	if err == nil {
 		keyCmd = cfg.ESVAPIKeyCmd
-		startupNote = cfg.KeyNotice
+		if cfg.SelectedTranslation == esv.ID {
+			savedKey = esv.Resolve(keyCmd)
+			esvKeyChecked = true
+		}
 		switch {
 		case translations.IsBuiltin(cfg.SelectedTranslation):
 			selectedTranslation = cfg.SelectedTranslation
-		case cfg.SelectedTranslation == esv.ID && esv.Resolve(keyCmd) != "":
+		case cfg.SelectedTranslation == esv.ID && savedKey != "":
 			selectedTranslation = esv.ID
 		case cfg.SelectedTranslation != "":
 			fellBack = true
@@ -263,9 +272,9 @@ func NewModel() Model {
 		comparisonPickerColumn: -1,
 		esvKeyInput:            esvKey,
 		esvKeyCmd:              keyCmd,
-		startupNote:            startupNote,
+		esvKeyChecked:          esvKeyChecked,
 	}
-	m.esvClient, _ = esv.New(esv.Resolve(keyCmd), esv.DefaultCacheDir())
+	m.esvClient, _ = esv.New(savedKey, esv.DefaultCacheDir())
 	if fellBack {
 		_ = m.saveSettings()
 	}

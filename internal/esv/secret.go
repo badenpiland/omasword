@@ -23,12 +23,6 @@ const (
 // the key.
 var ErrNoKeyring = errors.New("no system keyring is available. Unlock gnome-keyring or KeePassXC (Secret Service), or set esv_api_key_cmd in config.json to a command that prints the key, such as \"pass show esv\"")
 
-// Notices shown once after a legacy config.json key is scrubbed.
-const (
-	MigrationOKNotice     = "ESV API key moved from config.json into the system keyring."
-	MigrationFailedNotice = "ESV key removed from config.json. No keyring was available; press t then a to set it again, or set esv_api_key_cmd."
-)
-
 // SaveKey stores key in the OS keyring. It does not write the key to disk.
 // An empty key deletes the keyring entry.
 func SaveKey(key string) error {

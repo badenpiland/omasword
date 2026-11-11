@@ -125,8 +125,6 @@ To use your own password manager instead, set `esv_api_key_cmd` in `~/.config/om
 
 `OMASWORD_ESV_API_KEY` is only for one process, such as CI or a single command. omasword never writes it anywhere. Do not put it in a shell startup file; that would keep the key in plain text. Use the keyring or `esv_api_key_cmd` for anything that should stick around.
 
-An older config that still has `esv_api_key` is moved into the keyring and the field is deleted from the file. If the keyring can't take it, the field is still deleted and omasword says so once.
-
 ESV text is fetched from Crossway as you read. omasword stores at most 500 verses, and at most half of any book, and shows the same limit on one screen. A longer passage (Obadiah, for example) is split across pages with `,` and `.`. The Crossway copyright notice and a link to [esv.org](https://www.esv.org/) appear wherever ESV text is shown, including copied verses. Requests stay inside Crossway's rate limits: 60 per minute, 1,000 per hour, and 5,000 per day.
 
 ## API

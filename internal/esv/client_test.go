@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
 // obadiahChapter is 21 verses, the shape api.esv.org returns for
-// "Obadiah 1:1-21". A bare "Obadiah 1" is only verse 1.
+// "Obadiah". A bare "Obadiah 1" is only verse 1.
 var obadiahChapter = func() string {
 	var b strings.Builder
 	b.WriteString("[1] The vision of Obadiah. [2] Behold, I will make you small.\n")
@@ -44,7 +46,7 @@ func TestChapterClipsCachesAndHidesTheKey(t *testing.T) {
 		switch q.Get("q") {
 		case "Obadiah 1":
 			fmt.Fprintf(w, `{"passages":["[1] The vision of Obadiah."]}`)
-		case "Obadiah 1:1-21":
+		case "Obadiah":
 			fmt.Fprintf(w, `{"passages":[%q]}`, obadiahChapter)
 		default:
 			t.Errorf("query q = %q", q.Get("q"))
@@ -199,5 +201,19 @@ func TestSearchClipsAShortBook(t *testing.T) {
 	}
 	if resp.Results[0].Book != 31 || resp.Results[0].Verse != 1 {
 		t.Fatalf("first hit = %+v", resp.Results[0])
+	}
+}
+
+func TestNewDeletesTheOldVerseCache(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "esv-verses.json")
+	if err := os.WriteFile(old, []byte(`{"entries":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New("", dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatalf("old verse cache still on disk (err %v)", err)
 	}
 }

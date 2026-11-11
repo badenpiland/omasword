@@ -136,15 +136,16 @@ func chapterCount(bookID int) int {
 }
 
 // passageQuery is the api.esv.org reference for one chapter.
-// Single-chapter books are requested as an explicit verse range:
-// Crossway reads "Obadiah 1" as verse 1, not as the chapter.
+// Single-chapter books are requested by name alone: Crossway reads
+// "Obadiah 1" as verse 1, and a verse range from our table would miss
+// 3 John 15, which the ESV has and the traditional count does not.
 func passageQuery(bookID, chapter int) (string, bool) {
 	name, ok := BookName(bookID)
 	if !ok || chapter < 1 || chapter > chapterCount(bookID) {
 		return "", false
 	}
 	if chapterCount(bookID) == 1 {
-		return fmt.Sprintf("%s 1:1-%d", name, verseCount(bookID)), true
+		return name, true
 	}
 	return fmt.Sprintf("%s %d", name, chapter), true
 }

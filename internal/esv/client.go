@@ -26,6 +26,10 @@ const (
 // ErrNoKey is returned when a request needs a key and none is configured.
 var ErrNoKey = errors.New("ESV needs your API key from https://api.esv.org/")
 
+// ErrKeyRejected is returned when Crossway refuses the key. Retrying with
+// the same key cannot succeed.
+var ErrKeyRejected = errors.New("ESV API key was rejected; check the key from https://api.esv.org/")
+
 // Passage is one legal page of ESV text.
 type Passage struct {
 	Verses      []api.Verse
@@ -61,8 +65,12 @@ func DefaultCacheDir() string {
 }
 
 // verseCacheFile is versioned because a bad parse of the HTML endpoint
-// was stored under esv-verses.json. That file is left unread.
-const verseCacheFile = "esv-verses-v2.json"
+// was stored under oldVerseCacheFile. That file still holds ESV text,
+// which counts toward Crossway's 500-verse storage cap, so New deletes it.
+const (
+	verseCacheFile    = "esv-verses-v2.json"
+	oldVerseCacheFile = "esv-verses.json"
+)
 
 // New builds a client. cacheDir holds the verse cache and esv-usage.json;
 // an empty cacheDir keeps both in memory. key may be empty, in which case
@@ -82,6 +90,9 @@ func New(key, cacheDir string) (*Client, error) {
 		}
 	} else {
 		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+			return nil, err
+		}
+		if err := os.Remove(filepath.Join(cacheDir, oldVerseCacheFile)); err != nil && !os.IsNotExist(err) {
 			return nil, err
 		}
 		verses, err = OpenVerseCache(filepath.Join(cacheDir, verseCacheFile))
@@ -356,7 +367,7 @@ func (c *Client) get(path string, query url.Values) ([]byte, error) {
 		return nil, &RateError{RetryAfter: wait}
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, errors.New("ESV API key was rejected; check the key from https://api.esv.org/")
+		return nil, ErrKeyRejected
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.redact(fmt.Errorf("ESV API returned status %d", resp.StatusCode))
