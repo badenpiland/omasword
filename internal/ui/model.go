@@ -2,6 +2,7 @@ package ui
 
 import (
 	"omasword/internal/api"
+	"omasword/internal/esv"
 	"omasword/internal/settings"
 	"omasword/internal/theme"
 	"omasword/internal/translations"
@@ -24,6 +25,7 @@ const (
 	modeAbout
 	modeWordSearch
 	modePicker // "v": Books → Chapters → Verses browser
+	modeESVKey // paste or remove a Crossway ESV API key
 )
 
 type focusPane int
@@ -121,6 +123,20 @@ type Model struct {
 	// every ~120ms while a download is running.
 	downloadProgress float64
 	progressBar      progress.Model
+	// ESV is online-only, through the user's own Crossway key.
+	// esvConfigKey is what gets written to config.json. The environment
+	// variable is applied on the client and is not copied here.
+	esvClient        *esv.Client
+	esvConfigKey     string
+	esvPageBook      int
+	esvPageChapter   int
+	esvPageStart     int
+	esvFirst         int
+	esvLast          int
+	esvTotal         int
+	esvNotice        string
+	esvKeyInput      textinput.Model
+	esvKeyThenSelect bool
 }
 
 type CacheInterface interface {
@@ -138,10 +154,14 @@ type CacheInterface interface {
 }
 
 type (
-	errMsg                  struct{ err error }
-	translationsLoadedMsg   struct{ translations []api.Translation }
-	booksLoadedMsg          struct{ books []api.Book }
-	chapterLoadedMsg        struct{ verses []api.Verse }
+	errMsg                struct{ err error }
+	translationsLoadedMsg struct{ translations []api.Translation }
+	booksLoadedMsg        struct{ books []api.Book }
+	chapterLoadedMsg      struct {
+		verses                      []api.Verse
+		esvFirst, esvLast, esvTotal int
+		esvNotice                   string
+	}
 	parallelVersesLoadedMsg struct{ verses map[string][]api.Verse }
 	cacheListLoadedMsg      struct{ translations []string }
 	downloadCompleteMsg     struct{ translation string }
@@ -181,16 +201,23 @@ func NewModel() Model {
 	wordSearch.CharLimit = 100
 	wordSearch.SetWidth(50)
 
+	esvKey := textinput.New()
+	esvKey.Placeholder = "paste your api.esv.org key"
+	esvKey.CharLimit = 128
+	esvKey.SetWidth(56)
+
 	// --- Load persisted settings (if any) ---
 	cfg, err := settings.Load()
 
 	selectedTranslation := translations.Default
 	currentBook := 1
 	currentChapter := 1
-	// A config saved by an older build may name ESV, NLT, or another
-	// copyrighted translation. Open the public-domain default instead
-	// of requesting a text we will not serve, and rewrite the config
-	// so the next launch does not keep pointing at it.
+	// A config saved by an older build may name NLT or another
+	// copyrighted translation, or ESV with no key. Open the
+	// public-domain default instead of requesting a text we will not
+	// serve, and rewrite the config so the next launch does not keep
+	// pointing at it. ESV is kept when a key is already configured.
+	configKey := ""
 	fellBack := false
 
 	// Colors always follow the active Omarchy desktop theme.
@@ -198,9 +225,13 @@ func NewModel() Model {
 	currentTheme := theme.Current()
 
 	if err == nil {
-		if translations.IsBuiltin(cfg.SelectedTranslation) {
+		configKey = cfg.ESVAPIKey
+		switch {
+		case translations.IsBuiltin(cfg.SelectedTranslation):
 			selectedTranslation = cfg.SelectedTranslation
-		} else if cfg.SelectedTranslation != "" {
+		case cfg.SelectedTranslation == esv.ID && esv.EffectiveKey(configKey) != "":
+			selectedTranslation = esv.ID
+		case cfg.SelectedTranslation != "":
 			fellBack = true
 		}
 		if cfg.CurrentBook > 0 {
@@ -226,7 +257,10 @@ func NewModel() Model {
 		focus:                  paneContent,
 		progressBar:            progress.New(progress.WithDefaultBlend(), progress.WithoutPercentage()),
 		comparisonPickerColumn: -1,
+		esvKeyInput:            esvKey,
+		esvConfigKey:           configKey,
 	}
+	m.esvClient, _ = esv.New(esv.EffectiveKey(configKey), esv.DefaultCacheDir())
 	if fellBack {
 		_ = m.saveSettings()
 	}
@@ -244,8 +278,8 @@ func (m *Model) SetCache(cache CacheInterface) {
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadTranslations(m.client),
-		loadBooks(m.client, m.selectedTranslation),
-		loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter),
+		m.loadReadingBooks(),
+		m.loadReadingChapter(m.currentBook, m.currentChapter),
 		omarchyTick(),
 	)
 }

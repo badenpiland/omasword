@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"omasword/internal/api"
+	"omasword/internal/esv"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -174,7 +175,7 @@ func (m *Model) pickerRight() tea.Cmd {
 	m.pickerVersesErr = nil
 	m.pickerVersesLoading = true
 	m.pickerVersesBook, m.pickerVersesChapter = m.pickerBook, m.pickerChapter
-	return loadPickerVerses(m.client, m.selectedTranslation, m.pickerBook, m.pickerChapter)
+	return m.loadPickerChapter(m.pickerBook, m.pickerChapter)
 }
 
 func (m *Model) pickerVersesLoaded(msg pickerVersesMsg) {
@@ -213,7 +214,14 @@ func (m Model) pickerOpen() (Model, tea.Cmd) {
 		m.sidebarSelected = i
 	}
 	m.loading = true
-	return m, func() tea.Msg { return chapterLoadedMsg{all} }
+	if m.selectedTranslation == esv.ID {
+		// Refetch through the ESV client so the page cap and the
+		// copyright notice travel with the chapter. The verse cache
+		// makes this a local read when the page is already stored.
+		m.esvPageStart = 1
+		return m, m.loadReadingChapter(m.currentBook, m.currentChapter)
+	}
+	return m, func() tea.Msg { return chapterLoadedMsg{verses: all} }
 }
 
 // handlePickerKey owns the keyboard while the picker is open, so reader

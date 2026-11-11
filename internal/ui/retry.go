@@ -41,7 +41,7 @@ func (m *Model) handleListLoad(msg tea.Msg) (cmd tea.Cmd, ok bool) {
 		cmd = retryAfter(listRetryDelay(m.booksRetries), retryBooksMsg{})
 		m.booksRetries++
 	case retryBooksMsg:
-		cmd = loadBooks(m.client, m.selectedTranslation)
+		cmd = m.loadReadingBooks()
 	case translationsFailedMsg:
 		m.translationsErr = msg.err
 		cmd = retryAfter(listRetryDelay(m.translationsRetries), retryTranslationsMsg{})
@@ -59,7 +59,7 @@ func (m *Model) handleListLoad(msg tea.Msg) (cmd tea.Cmd, ok bool) {
 	case retryChapterMsg:
 		if msg.book == m.currentBook && msg.chapter == m.currentChapter {
 			m.loading = true
-			cmd = loadChapter(m.client, m.selectedTranslation, msg.book, msg.chapter)
+			cmd = m.loadReadingChapter(msg.book, msg.chapter)
 		}
 	default:
 		return nil, false

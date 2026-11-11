@@ -2,6 +2,7 @@ package ui
 
 import (
 	"omasword/internal/api"
+	"omasword/internal/esv"
 	"omasword/internal/translations"
 )
 
@@ -30,5 +31,9 @@ func presentTranslations(in []api.Translation) []api.Translation {
 		t.FullName = info.FullName
 		out = append(out, t)
 	}
+	// ESV is not served from bolls.life. It is listed so a reader with
+	// their own Crossway key can select it. The download manager refuses
+	// to cache it.
+	out = append(out, api.Translation{ShortName: esv.ID, FullName: "English Standard Version"})
 	return out
 }

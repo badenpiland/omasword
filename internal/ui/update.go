@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"omasword/internal/esv"
 	"omasword/internal/settings"
 	"omasword/internal/theme"
 	"sort"
@@ -69,6 +70,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.mode = modeComparison
 					return m, nil
 				}
+				if m.mode == modeESVKey {
+					m.esvKeyThenSelect = false
+					m.esvKeyInput.SetValue("")
+					m.mode = modeTranslationSelect
+					return m, nil
+				}
 				m.mode = modeReader
 				m.wordSearchResults = nil
 				m.wordSearchInput.SetValue("")
@@ -92,7 +99,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentChapter = 1
 				m.focus = paneContent
 				m.loading = true
-				return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter)
+				return m, m.loadReadingChapter(m.currentBook, m.currentChapter)
 			}
 			return m, nil
 		}
@@ -279,6 +286,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.currentVerses = msg.verses
 		m.currentParallelVerses = nil
+		if m.selectedTranslation == esv.ID {
+			m.esvFirst, m.esvLast, m.esvTotal = msg.esvFirst, msg.esvLast, msg.esvTotal
+			if msg.esvNotice != "" {
+				m.esvNotice = msg.esvNotice
+			}
+		} else {
+			m.esvFirst, m.esvLast, m.esvTotal = 0, 0, 0
+		}
 		// Track if we came from a search (highlighted verse was set)
 		cameFromSearch := m.highlightedVerseStart > 1
 		// Initialize highlighted verse to first verse or use the range from search
@@ -375,6 +390,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.mode == modeSearch {
 		m.textInput, cmd = m.textInput.Update(msg)
 		cmds = append(cmds, cmd)
+	} else if m.mode == modeESVKey {
+		m.esvKeyInput, cmd = m.esvKeyInput.Update(msg)
+		cmds = append(cmds, cmd)
 	} else if m.mode == modeWordSearch && m.wordSearchResults == nil && !m.wordSearchLoading {
 		// Update word search input when typing query
 		m.wordSearchInput, cmd = m.wordSearchInput.Update(msg)
@@ -435,7 +453,7 @@ func (m *Model) stepChapter(delta int) tea.Cmd {
 	m.loading = true
 	m.highlightedVerseStart = 0
 	m.highlightedVerseEnd = 0
-	return loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter)
+	return m.loadReadingChapter(m.currentBook, m.currentChapter)
 }
 
 // saveSettings persists the reading position and translation.
@@ -444,6 +462,7 @@ func (m Model) saveSettings() error {
 		SelectedTranslation: m.selectedTranslation,
 		CurrentBook:         m.currentBook,
 		CurrentChapter:      m.currentChapter,
+		ESVAPIKey:           m.esvConfigKey,
 	})
 }
 
@@ -457,6 +476,8 @@ func (m Model) typingInInput() bool {
 	case m.mode == modeWordSearch && m.wordSearchResults == nil && !m.wordSearchLoading:
 		return true
 	case m.mode == modePicker && m.pickerFiltering:
+		return true
+	case m.mode == modeESVKey:
 		return true
 	}
 	return false

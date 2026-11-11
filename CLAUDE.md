@@ -25,6 +25,11 @@ go test ./...
 - `internal/translations`: public-domain allowlist (BSB, KJV, WEB, ASV, YLT,
  Geneva, Douay-Rheims). The bolls client and the offline cache both refuse
  anything else.
+- `internal/esv`: optional ESV via the user's own Crossway API key
+ (`OMASWORD_ESV_API_KEY` or `esv_api_key` in the config, mode 0600). Online
+ only. The local cache stays within 500 verses and half of any book, and
+ the copyright notice plus an esv.org link are shown with the text. Do not
+ bulk-download the ESV or log the key.
 - `internal/api`: bolls.life HTTP client. Everything it returns is untrusted:
  text goes through `SanitizeText` (strips terminal control characters) and
  translation names through `ValidTranslationName` before use in URLs or paths.

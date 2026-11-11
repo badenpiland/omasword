@@ -1,12 +1,17 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"omasword/internal/api"
+	"omasword/internal/esv"
 	"omasword/internal/settings"
 	"omasword/internal/translations"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestPresentTranslationsDropsCopyrighted(t *testing.T) {
@@ -20,10 +25,10 @@ func TestPresentTranslationsDropsCopyrighted(t *testing.T) {
 		{ShortName: "WEB", FullName: "World English Bible"},
 	}
 	got := presentTranslations(in)
-	if len(got) != 4 {
-		t.Fatalf("got %d translations, want BSB, KJV, WEB, YLT", len(got))
+	if len(got) != 5 {
+		t.Fatalf("got %d translations, want BSB, KJV, WEB, YLT, ESV", len(got))
 	}
-	want := []string{"BSB", "KJV", "WEB", "YLT"}
+	want := []string{"BSB", "KJV", "WEB", "YLT", "ESV"}
 	for i, name := range want {
 		if got[i].ShortName != name {
 			t.Fatalf("position %d = %s, want %s (catalog order)", i, got[i].ShortName, name)
@@ -35,6 +40,7 @@ func TestPresentTranslationsDropsCopyrighted(t *testing.T) {
 }
 
 func TestSavedCopyrightedTranslationFallsBackToBSB(t *testing.T) {
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
 	for _, saved := range []string{"ESV", "NLT", "CSB17", "NASB"} {
 		t.Run(saved, func(t *testing.T) {
 			dir := t.TempDir()
@@ -93,8 +99,11 @@ func TestTranslationPickerShowsFlavor(t *testing.T) {
 	if !strings.Contains(view, "uses Yahweh") {
 		t.Fatal("picker should describe WEB as using Yahweh")
 	}
-	if strings.Contains(view, "ESV") {
-		t.Fatal("picker should not list ESV")
+	if !strings.Contains(view, "api.esv.org") {
+		t.Fatal("picker should offer ESV with a pointer to api.esv.org")
+	}
+	if strings.Contains(view, "NLT") {
+		t.Fatal("picker should not list NLT")
 	}
 	if !strings.Contains(view, "Berean Standard Bible") {
 		t.Fatal("picker should name the BSB")
@@ -114,5 +123,125 @@ func TestFlavorLineClickSelectsThatTranslation(t *testing.T) {
 	m.overlayClick(3)
 	if m.selectedTranslation != "KJV" || m.mode != modeReader {
 		t.Fatalf("after flavor click: translation %s mode %d", m.selectedTranslation, m.mode)
+	}
+}
+
+func TestSavedESVStaysWhenAKeyIsConfigured(t *testing.T) {
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := settings.Save(settings.Settings{SelectedTranslation: "ESV", CurrentBook: 43, CurrentChapter: 16, ESVAPIKey: "test-key-not-real"}); err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel()
+	if m.selectedTranslation != esv.ID || !m.esvClient.HasKey() {
+		t.Fatalf("translation %s key %v", m.selectedTranslation, m.esvClient != nil && m.esvClient.HasKey())
+	}
+	if m.currentBook != 43 || m.currentChapter != 16 {
+		t.Fatalf("position %d:%d", m.currentBook, m.currentChapter)
+	}
+}
+
+func TestEnvESVKeyIsNotWrittenToConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("OMASWORD_ESV_API_KEY", "from-env-not-a-real-key")
+	if err := settings.Save(settings.Settings{SelectedTranslation: "ESV", CurrentBook: 43, CurrentChapter: 16}); err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel()
+	if m.selectedTranslation != "ESV" || m.esvConfigKey != "" {
+		t.Fatalf("translation %s stored key %q", m.selectedTranslation, m.esvConfigKey)
+	}
+	m.Update(chapterLoadedMsg{verses: []api.Verse{{Verse: 16, Text: "For God so loved"}}})
+	data, err := os.ReadFile(filepath.Join(dir, "omasword", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "from-env") {
+		t.Fatalf("environment key was written to config: %s", data)
+	}
+}
+
+func TestESVWizardStoresAndRemovesTheKey(t *testing.T) {
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	m := NewModel()
+	m.translations = presentTranslations(nil)
+	for i, tr := range m.translations {
+		if tr.ShortName == esv.ID {
+			m.translationSelected = i
+		}
+	}
+	m.mode = modeTranslationSelect
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatal("selecting ESV without a key should not fetch")
+	}
+	if m.mode != modeESVKey {
+		t.Fatalf("mode %d, want the key wizard", m.mode)
+	}
+	m.esvKeyInput.SetValue("test-key-not-real")
+	next, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("saving a key and selecting ESV should load the chapter")
+	}
+	if !m.esvClient.HasKey() || m.selectedTranslation != esv.ID {
+		t.Fatalf("translation %s hasKey %v", m.selectedTranslation, m.esvClient.HasKey())
+	}
+	info, err := os.Stat(filepath.Join(dir, "omasword", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("config mode = %o, want 600", info.Mode().Perm())
+	}
+
+	m.mode = modeESVKey
+	m.esvKeyThenSelect = false
+	m.esvKeyInput.SetValue("  ")
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if m.esvClient.HasKey() || m.selectedTranslation != translations.Default {
+		t.Fatalf("after removal: translation %s hasKey %v", m.selectedTranslation, m.esvClient.HasKey())
+	}
+	info, err = os.Stat(filepath.Join(dir, "omasword", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("config mode = %o, want 644 after removal", info.Mode().Perm())
+	}
+	got, err := settings.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ESVAPIKey != "" {
+		t.Fatalf("removed key is still stored: %q", got.ESVAPIKey)
+	}
+}
+
+func TestESVChapterShowsCopyrightAndLink(t *testing.T) {
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	m := NewModel()
+	m.selectedTranslation = esv.ID
+	m.esvNotice = esv.CopyrightNotice
+	m.esvFirst, m.esvLast, m.esvTotal = 1, 10, 21
+	out := m.formatChapter([]api.Verse{{Verse: 1, Text: "The vision of Obadiah."}}, "Obadiah", 1, 72, 0, 0)
+	if !strings.Contains(out, "The vision of Obadiah.") {
+		t.Fatal("verse text missing")
+	}
+	if !strings.Contains(out, "Crossway") || !strings.Contains(out, "esv.org") {
+		t.Fatalf("copyright notice missing:\n%s", out)
+	}
+	if !strings.Contains(out, "Showing verses 1") {
+		t.Fatal("clipped chapter should say which verses are on the page")
 	}
 }

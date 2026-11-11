@@ -52,7 +52,7 @@ func TestBooksFailureShowsErrorAndRetries(t *testing.T) {
 func TestChapterSuccessDoesNotHideBooksFailure(t *testing.T) {
 	m := sizedModel(t)
 	next, _ := m.Update(booksFailedMsg{errBusy})
-	next, _ = next.(Model).Update(chapterLoadedMsg{[]api.Verse{{Verse: 1, Text: "x"}}})
+	next, _ = next.(Model).Update(chapterLoadedMsg{verses: []api.Verse{{Verse: 1, Text: "x"}}})
 	if m := next.(Model); m.booksErr == nil {
 		t.Fatal("the chapter loading must not clear the books failure")
 	}

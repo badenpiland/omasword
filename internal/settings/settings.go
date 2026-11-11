@@ -10,6 +10,10 @@ type Settings struct {
 	SelectedTranslation string `json:"selected_translation"`
 	CurrentBook         int    `json:"current_book"`
 	CurrentChapter      int    `json:"current_chapter"`
+	// ESVAPIKey is the user's own Crossway key from api.esv.org. It is
+	// omitted when empty. The config file is mode 0600 while this is set.
+	// OMASWORD_ESV_API_KEY overrides it and is not written here.
+	ESVAPIKey string `json:"esv_api_key,omitempty"`
 }
 
 // legacyDirName is the config directory used before the rename from
@@ -68,12 +72,17 @@ func Save(s Settings) error {
 		return err
 	}
 
-	return writeFileAtomic(path, data)
+	mode := os.FileMode(0o644)
+	if s.ESVAPIKey != "" {
+		// The key lives in this file, so the file itself is owner-only.
+		mode = 0o600
+	}
+	return writeFileAtomic(path, data, mode)
 }
 
 // writeFileAtomic writes data to a temp file beside path and renames it into
 // place, so a crash or kill mid-write never leaves a truncated config.
-func writeFileAtomic(path string, data []byte) error {
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
@@ -83,7 +92,7 @@ func writeFileAtomic(path string, data []byte) error {
 		tmp.Close()
 		return err
 	}
-	if err := tmp.Chmod(0o644); err != nil {
+	if err := tmp.Chmod(mode); err != nil {
 		tmp.Close()
 		return err
 	}
@@ -104,6 +113,6 @@ func migrateLegacy(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = writeFileAtomic(path, data)
+	_ = writeFileAtomic(path, data, 0o644)
 	return data, nil
 }
