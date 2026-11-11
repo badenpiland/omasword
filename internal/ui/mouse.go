@@ -112,16 +112,7 @@ func (m Model) overlayPanelBounds() (int, int, int, int) {
 	}
 	panelW := lipgloss.Width(panel)
 	panelH := lipgloss.Height(panel)
-	rightX := leftPaneOuterWidth
-	rightW := m.width - rightX
-	x := rightX + (rightW-panelW)/2
-	y := (m.height-panelH)/2 + 1
-	if x < 1 {
-		x = 1
-	}
-	if y < 1 {
-		y = 1
-	}
+	x, y := m.overlayOrigin(panelW, panelH)
 	return x, y, panelW, panelH
 }
 
@@ -190,6 +181,8 @@ func (m *Model) overlayClick(row int) tea.Cmd {
 // overlayNudge moves the selection in the active overlay by delta (±1).
 func (m *Model) overlayNudge(delta int) {
 	switch m.mode {
+	case modePicker:
+		m.pickerMove(delta)
 	case modeTranslationSelect:
 		if m.translations == nil {
 			return

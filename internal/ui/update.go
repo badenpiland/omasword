@@ -356,6 +356,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.wordSearchResults[i].Verse < m.wordSearchResults[j].Verse
 		})
 
+	case pickerVersesMsg:
+		m.pickerVersesLoaded(msg)
+
 	case errMsg:
 		m.err = msg.err
 		m.loading = false
@@ -369,18 +372,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update word search input when typing query
 		m.wordSearchInput, cmd = m.wordSearchInput.Update(msg)
 		cmds = append(cmds, cmd)
-	} else if m.showMillerColumns && m.millerFilterMode {
-		// Update Miller filter input when in filter mode
-		m.millerFilterInput, cmd = m.millerFilterInput.Update(msg)
+	} else if m.mode == modePicker && m.pickerFiltering {
+		before := m.pickerFilterInput.Value()
+		m.pickerFilterInput, cmd = m.pickerFilterInput.Update(msg)
 		cmds = append(cmds, cmd)
-
-		// Apply filter when input changes
-		newFilter := m.millerFilterInput.Value()
-		if newFilter != m.millerFilter {
-			m.millerFilter = newFilter
-			m.applyMillerFilter()
-			m.millerBookIdx = 0
-			m.millerVerseIdx = 0
+		if m.pickerFilterInput.Value() != before {
+			m.pickerFilterChanged()
 		}
 	} else {
 		oldYOffset := m.viewport.YOffset()
@@ -444,7 +441,7 @@ func (m Model) saveSettings() error {
 }
 
 // typingInInput reports whether key presses are currently going to a text
-// input (verse lookup, word search, or the Miller-columns filter). It
+// input (verse lookup, word search, or the "v" picker filter). It
 // mirrors the input routing at the end of Update.
 func (m Model) typingInInput() bool {
 	switch {
@@ -452,7 +449,7 @@ func (m Model) typingInInput() bool {
 		return true
 	case m.mode == modeWordSearch && m.wordSearchResults == nil && !m.wordSearchLoading:
 		return true
-	case m.showMillerColumns && m.millerFilterMode:
+	case m.mode == modePicker && m.pickerFiltering:
 		return true
 	}
 	return false

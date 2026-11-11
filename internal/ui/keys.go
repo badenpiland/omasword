@@ -12,6 +12,9 @@ import (
 // handleKey runs the global keyboard shortcuts. handled is false when the
 // key should fall through to the focused text input or the viewport.
 func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
+	if m.mode == modePicker {
+		return m.handlePickerKey(msg)
+	}
 	switch msg.String() {
 	case "ctrl+c", "q":
 		// "q" is a letter like any other while a text input has
@@ -67,38 +70,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 		}
 	case "v":
 		if m.mode == modeReader {
-			m.showMillerColumns = !m.showMillerColumns
-			if m.showMillerColumns && m.books != nil {
-				// Initialize Miller columns with current position
-				for i, book := range m.books {
-					if book.BookID == m.currentBook {
-						m.millerBookIdx = i
-						break
-					}
-				}
-				m.millerChapterIdx = m.currentChapter - 1
-				m.millerVerseIdx = 0
-				m.millerColumn = 0
-				// Reset filter
-				m.millerFilterInput.SetValue("")
-				m.millerFilter = ""
-				m.millerFilteredBooks = nil
-				m.millerFilteredVerses = nil
-				m.millerFilterMode = false
-			}
+			m.openPicker()
 			return m, nil, true
 		}
 	case "/":
-		if m.showMillerColumns {
-			// Toggle filter mode in Miller columns
-			m.millerFilterMode = !m.millerFilterMode
-			if m.millerFilterMode {
-				m.millerFilterInput.Focus()
-			} else {
-				m.millerFilterInput.Blur()
-			}
-			return m, nil, true
-		} else if m.mode == modeReader {
+		if m.mode == modeReader {
 			// Close sidebar if open when entering search mode
 			m.focus = paneContent
 			m.mode = modeSearch
@@ -115,25 +91,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			return m, nil, true
 		} else if m.mode == modeCacheManager && m.translations != nil && m.cacheSelected > 0 {
 			m.cacheSelected--
-			return m, nil, true
-		} else if m.showMillerColumns && !m.millerFilterMode {
-			switch m.millerColumn {
-			case 0: // Books column
-				if m.millerBookIdx > 0 {
-					m.millerBookIdx--
-					m.millerChapterIdx = 0
-					m.millerVerseIdx = 0
-				}
-			case 1: // Chapters column
-				if m.millerChapterIdx > 0 {
-					m.millerChapterIdx--
-					m.millerVerseIdx = 0
-				}
-			case 2: // Verses column
-				if m.millerVerseIdx > 0 {
-					m.millerVerseIdx--
-				}
-			}
 			return m, nil, true
 		} else if m.focus == paneBooks && m.sidebarSelected > 0 {
 			m.sidebarSelected--
@@ -166,40 +123,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 		} else if m.mode == modeCacheManager && m.translations != nil && m.cacheSelected < len(m.translations)-1 {
 			m.cacheSelected++
 			return m, nil, true
-		} else if m.showMillerColumns && !m.millerFilterMode && m.books != nil {
-			switch m.millerColumn {
-			case 0: // Books column
-				booksToUse := m.books
-				if m.millerFilter != "" && m.millerFilteredBooks != nil {
-					booksToUse = m.millerFilteredBooks
-				}
-				if m.millerBookIdx < len(booksToUse)-1 {
-					m.millerBookIdx++
-					m.millerChapterIdx = 0
-					m.millerVerseIdx = 0
-				}
-			case 1: // Chapters column
-				booksToUse := m.books
-				if m.millerFilter != "" && m.millerFilteredBooks != nil {
-					booksToUse = m.millerFilteredBooks
-				}
-				if m.millerBookIdx < len(booksToUse) {
-					selectedBook := booksToUse[m.millerBookIdx]
-					if m.millerChapterIdx < selectedBook.Chapters-1 {
-						m.millerChapterIdx++
-						m.millerVerseIdx = 0
-					}
-				}
-			case 2: // Verses column
-				versesToUse := m.currentVerses
-				if m.millerFilter != "" && m.millerFilteredVerses != nil {
-					versesToUse = m.millerFilteredVerses
-				}
-				if versesToUse != nil && m.millerVerseIdx < len(versesToUse)-1 {
-					m.millerVerseIdx++
-				}
-			}
-			return m, nil, true
 		} else if m.focus == paneBooks && m.books != nil && m.sidebarSelected < len(m.books)-1 {
 			m.sidebarSelected++
 			return m, nil, true
@@ -218,33 +141,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, m.viewport.Width(), m.highlightedVerseStart, m.highlightedVerseEnd)
 				m.viewport.SetContent(m.content)
 				m.scrollToHighlightedVerse()
-			}
-			return m, nil, true
-		}
-	case "left", "h":
-		if m.showMillerColumns && !m.millerFilterMode && m.millerColumn > 0 {
-			m.millerColumn--
-			return m, nil, true
-		}
-	case "right", "l":
-		if m.showMillerColumns && !m.millerFilterMode {
-			if m.millerColumn < 2 {
-				m.millerColumn++
-				// When moving to verses column, load the chapter if not already loaded
-				if m.millerColumn == 2 {
-					booksToUse := m.books
-					if m.millerFilter != "" && m.millerFilteredBooks != nil {
-						booksToUse = m.millerFilteredBooks
-					}
-					if m.millerBookIdx < len(booksToUse) {
-						selectedBook := booksToUse[m.millerBookIdx]
-						selectedChapter := m.millerChapterIdx + 1
-						// Only load if different from current
-						if selectedBook.BookID != m.currentBook || selectedChapter != m.currentChapter {
-							return m, loadChapter(m.client, m.selectedTranslation, selectedBook.BookID, selectedChapter), true
-						}
-					}
-				}
 			}
 			return m, nil, true
 		}
@@ -373,30 +269,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				return m, tea.Batch(downloadTranslation(m.cache, translation), downloadTick()), true
 			}
 			return m, nil, true
-		} else if m.showMillerColumns && m.millerFilterMode {
-			// Exit filter mode on enter
-			m.millerFilterMode = false
-			m.millerFilterInput.Blur()
-			return m, nil, true
-		} else if m.showMillerColumns && m.books != nil && m.currentVerses != nil {
-			// Navigate to the selected verse
-			booksToUse := m.books
-			if m.millerFilter != "" && m.millerFilteredBooks != nil {
-				booksToUse = m.millerFilteredBooks
-			}
-			if m.millerBookIdx < len(booksToUse) {
-				selectedBook := booksToUse[m.millerBookIdx]
-				selectedChapter := m.millerChapterIdx + 1
-				m.currentBook = selectedBook.BookID
-				m.currentBookName = selectedBook.Name
-				m.currentChapter = selectedChapter
-				m.showMillerColumns = false
-				m.loading = true
-				m.highlightedVerseStart = 0
-				m.highlightedVerseEnd = 0
-				// Scroll viewport to the selected verse
-				return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter), true
-			}
 		} else if m.focus == paneBooks && m.books != nil {
 			// Select book from sidebar
 			if m.sidebarSelected < len(m.books) {
@@ -511,15 +383,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 	case "esc":
 		if m.mode == modeCacheManager {
 			m.mode = modeReader
-			return m, nil, true
-		}
-		if m.showMillerColumns && m.millerFilterMode {
-			// Exit filter mode on esc
-			m.millerFilterMode = false
-			m.millerFilterInput.Blur()
-			return m, nil, true
-		} else if m.showMillerColumns {
-			m.showMillerColumns = false
 			return m, nil, true
 		}
 		if m.mode == modeSearch || m.mode == modeTranslationSelect || m.mode == modeAbout || m.mode == modeComparison || m.mode == modeWordSearch || m.mode == modeCacheManager {
