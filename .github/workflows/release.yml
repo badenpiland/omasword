@@ -29,13 +29,36 @@ jobs:
         with:
           persist-credentials: false
 
+      # The version shown in the app comes from internal/version; refuse to
+      # release a tag that doesn't match it.
+      - name: Check tag matches app version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          grep -qF "const Version = \"$TAG\"" internal/version/version.go || {
+            echo "::error::tag $TAG does not match Version in internal/version/version.go"
+            exit 1
+          }
+
+      # Build with the newest stable Go, not the minimum in go.mod: Go
+      # compiles its standard library (HTTPS, certificate checks) into the
+      # binary, so an old toolchain ships its old security bugs.
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version-file: go.mod
+          go-version: stable
+          check-latest: true
 
       - name: Test
         run: go test ./...
+
+      # Fail the release if the code reaches a known vulnerability, in a
+      # dependency or in the Go standard library itself.
+      - name: Check for known vulnerabilities
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
       - name: Build binary
         env:

@@ -21,6 +21,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 omasword follows [Semantic Versioning](https://semver.org/). The version
 lives in `internal/version/version.go`; bump it in the PR that prepares a
-release, then tag `vX.Y.Z` on `main`. Pushing the tag runs
+release, then tag `vX.Y.Z` on `main` (the release stops if the tag and
+that version differ). Pushing the tag runs
 `.github/workflows/release.yml`, which tests, builds Linux amd64/arm64
 binaries and publishes a GitHub release.
