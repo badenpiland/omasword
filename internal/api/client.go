@@ -203,6 +203,48 @@ func requireBuiltin(name string) error {
 	return nil
 }
 
+// CanonBooks is the number of books omasword shows: the 66 books of the
+// Protestant canon, IDs 1 to 66. bolls.life numbers other books above 66.
+const CanonBooks = 66
+
+// IsCanon reports whether bookID is one of the 66 books.
+func IsCanon(bookID int) bool {
+	return bookID >= 1 && bookID <= CanonBooks
+}
+
+func checkCanon(bookID int) error {
+	if !IsCanon(bookID) {
+		return fmt.Errorf("no book %d", bookID)
+	}
+	return nil
+}
+
+// canonBooks keeps the 66 books, with sanitized names.
+func canonBooks(books []Book) []Book {
+	out := books[:0]
+	for _, b := range books {
+		if IsCanon(b.BookID) {
+			b.Name = SanitizeText(b.Name)
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// canonHits drops search hits outside the 66 books and counts them out
+// of the total.
+func canonHits(resp *SearchResponse) {
+	hits := resp.Results[:0]
+	for _, v := range resp.Results {
+		if IsCanon(v.Book) {
+			hits = append(hits, v)
+		} else if resp.Total > 0 {
+			resp.Total--
+		}
+	}
+	resp.Results = hits
+}
+
 func sanitizeVerses(verses []Verse) {
 	for i := range verses {
 		verses[i].Text = SanitizeText(verses[i].Text)
@@ -258,14 +300,14 @@ func (c *Client) GetBooks(translation string) ([]Book, error) {
 	if err := c.getJSON(fmt.Sprintf("%s/get-books/%s/", baseURL, translation), &books); err != nil {
 		return nil, err
 	}
-	for i := range books {
-		books[i].Name = SanitizeText(books[i].Name)
-	}
-	return books, nil
+	return canonBooks(books), nil
 }
 
 func (c *Client) GetChapter(translation string, book, chapter int) ([]Verse, error) {
 	if err := requireBuiltin(translation); err != nil {
+		return nil, err
+	}
+	if err := checkCanon(book); err != nil {
 		return nil, err
 	}
 	// Try cache first if available. A cache file that can't be read
@@ -289,6 +331,9 @@ func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse
 		if err := requireBuiltin(t); err != nil {
 			return nil, err
 		}
+	}
+	if err := checkCanon(req.Book); err != nil {
+		return nil, err
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -330,6 +375,7 @@ func (c *Client) SearchVerses(translation, query string) (*SearchResponse, error
 	if err := c.getJSON(fmt.Sprintf("%s/v2/find/%s?%s", baseURL, translation, params.Encode()), &searchResp); err != nil {
 		return nil, err
 	}
+	canonHits(&searchResp)
 	sanitizeVerses(searchResp.Results)
 
 	return &searchResp, nil
