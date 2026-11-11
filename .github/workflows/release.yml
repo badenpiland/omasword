@@ -53,12 +53,17 @@ jobs:
         run: go test ./...
 
       # Fail the release if the code reaches a known vulnerability, in a
-      # dependency or in the Go standard library itself.
+      # dependency or in the Go standard library itself. The tool is built
+      # for the runner; only the scan targets the matrix architecture
+      # (`go run` with GOARCH=arm64 would build a tool the runner can't run).
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+
       - name: Check for known vulnerabilities
         env:
           GOOS: linux
           GOARCH: ${{ matrix.goarch }}
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+        run: '"$(go env GOPATH)/bin/govulncheck" ./...'
 
       - name: Build binary
         env:
