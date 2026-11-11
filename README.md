@@ -103,7 +103,8 @@ omasword
 - `s` - Word search
 - `v` - Browse to a passage: Books → Chapters → Verses columns (`/` filters a column, `Enter` opens the verse)
 - `c` - Comparison view (side-by-side translations)
-- `t` - Translation picker
+- `t` - Translation picker (`a` in that picker sets or clears an ESV API key)
+- `,` / `.` - Previous / next ESV page, when a chapter is longer than Crossway's per-page limit
 - `d` - Cache manager (`x` deletes a cached translation here)
 - `r` - Return to reader from any overlay
 - `y` - Yank/copy selected verse
@@ -116,7 +117,15 @@ omasword
 
 The default translation is the **Berean Standard Bible (BSB)**. [bolls.life](https://bolls.life/api/) serves it, and it has been public domain since 2023: modern, word-for-word English, and the closest built-in text to the reading level of recent evangelical translations. The picker also offers the other public-domain texts that API hosts — KJV, WEB, ASV, YLT, the Geneva Bible, and the Douay-Rheims — each with a one-line description of how it reads. Darby is public domain, but bolls.life does not host it, so it is not listed. A public-domain text that is not hosted there can be added later from the publisher's own files.
 
-Copyrighted translations are not fetched or cached. That includes the ESV (Crossway), the NLT (Tyndale), and the CSB (Holman). A saved config or an older download that still names one of them opens the BSB instead of failing.
+Copyrighted translations are not fetched in bulk or cached as a whole Bible. That includes the NLT (Tyndale) and the CSB (Holman). A saved config that still names one of them opens the BSB instead of failing.
+
+The ESV (Crossway) is the exception, and only with your own key. Crossway allows non-commercial use through [api.esv.org](https://api.esv.org/), not through a third-party download. In the translation picker, choose ESV and paste the key when asked, or press `a` there to replace it. Submitting an empty key deletes it. The key is stored in the system keyring (gnome-keyring or KeePassXC on Omarchy), not in a file. If no keyring is available, omasword refuses to save it and tells you how to unlock one.
+
+To use your own password manager instead, set `esv_api_key_cmd` in `~/.config/omasword/config.json` to a command whose first line of stdout is the key, for example `"pass show esv"`. That output is not written to disk.
+
+`OMASWORD_ESV_API_KEY` is only for one process, such as CI or a single command. omasword never writes it anywhere. Do not put it in a shell startup file; that would keep the key in plain text. Use the keyring or `esv_api_key_cmd` for anything that should stick around.
+
+ESV text is fetched from Crossway as you read. omasword stores at most 500 verses, and at most half of any book, and shows the same limit on one screen. A longer passage (Obadiah, for example) is split across pages with `,` and `.`. The Crossway copyright notice and a link to [esv.org](https://www.esv.org/) appear wherever ESV text is shown, including copied verses. Requests stay inside Crossway's rate limits: 60 per minute, 1,000 per hour, and 5,000 per day.
 
 ## API
 

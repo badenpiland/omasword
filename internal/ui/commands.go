@@ -57,7 +57,7 @@ func loadChapter(client *api.Client, translation string, book, chapter int) tea.
 		if err != nil {
 			return chapterFailedMsg{book: book, chapter: chapter, err: err}
 		}
-		return chapterLoadedMsg{verses}
+		return chapterLoadedMsg{verses: verses}
 	}
 }
 

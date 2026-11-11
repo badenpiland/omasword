@@ -42,7 +42,7 @@ func (m Model) viewportSize() (int, int) {
 func (m Model) overlayActive() bool {
 	switch m.mode {
 	case modeSearch, modeTranslationSelect,
-		modeCacheManager, modeAbout, modeWordSearch, modePicker:
+		modeCacheManager, modeAbout, modeWordSearch, modePicker, modeESVKey:
 		return true
 	}
 	return false
@@ -188,7 +188,9 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 	var hs []hint
 	switch m.mode {
 	case modeTranslationSelect:
-		hs = []hint{{"↑↓", "navigate"}, {"⏎", "select"}, {"esc", "close"}}
+		hs = []hint{{"↑↓", "navigate"}, {"⏎", "select"}, {"a", "ESV key"}, {"esc", "close"}}
+	case modeESVKey:
+		hs = []hint{{"⏎", "save key"}, {"esc", "cancel"}}
 	case modeCacheManager:
 		hs = []hint{{"↑↓", "navigate"}, {"⏎", "download"}, {"x", "delete"}, {"esc", "close"}}
 	case modeAbout:
@@ -560,6 +562,8 @@ func (m Model) renderOverlayPanel() string {
 		return m.renderWordSearch()
 	case modePicker:
 		return m.renderPicker()
+	case modeESVKey:
+		return m.renderESVKey()
 	}
 	return ""
 }

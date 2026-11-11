@@ -10,6 +10,10 @@ type Settings struct {
 	SelectedTranslation string `json:"selected_translation"`
 	CurrentBook         int    `json:"current_book"`
 	CurrentChapter      int    `json:"current_chapter"`
+	// ESVAPIKeyCmd is a command whose first line of stdout is the ESV API
+	// key (for example "pass show esv"). The command is stored here. Its
+	// output is not.
+	ESVAPIKeyCmd string `json:"esv_api_key_cmd,omitempty"`
 }
 
 // legacyDirName is the config directory used before the rename from
@@ -53,7 +57,6 @@ func Load() (Settings, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return Settings{}, err
 	}
-
 	return s, nil
 }
 
@@ -67,13 +70,12 @@ func Save(s Settings) error {
 	if err != nil {
 		return err
 	}
-
-	return writeFileAtomic(path, data)
+	return writeFileAtomic(path, data, 0o644)
 }
 
 // writeFileAtomic writes data to a temp file beside path and renames it into
 // place, so a crash or kill mid-write never leaves a truncated config.
-func writeFileAtomic(path string, data []byte) error {
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
@@ -83,7 +85,7 @@ func writeFileAtomic(path string, data []byte) error {
 		tmp.Close()
 		return err
 	}
-	if err := tmp.Chmod(0o644); err != nil {
+	if err := tmp.Chmod(mode); err != nil {
 		tmp.Close()
 		return err
 	}
@@ -104,6 +106,6 @@ func migrateLegacy(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = writeFileAtomic(path, data)
+	_ = writeFileAtomic(path, data, 0o644)
 	return data, nil
 }

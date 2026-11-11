@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 
+	"omasword/internal/translations"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -143,22 +145,13 @@ func (m *Model) overlayClick(row int) tea.Cmd {
 		}
 		m.translationSelected = idx
 		newTrans := m.translations[idx].ShortName
-		// Picker scoped to a comparison column: swap that column.
-		if m.comparisonPickerColumn >= 0 && m.comparisonPickerColumn < len(m.comparisonTranslations) {
-			m.comparisonTranslations[m.comparisonPickerColumn] = newTrans
-			m.comparisonPickerColumn = -1
-			m.mode = modeComparison
-			m.loading = true
-			return loadParallelVerses(m.client, m.comparisonTranslations, m.currentBook, m.currentChapter, m.comparisonVerseList())
-		}
-		if newTrans == m.selectedTranslation {
+		if newTrans == m.selectedTranslation && m.comparisonPickerColumn < 0 {
 			m.mode = modeReader
 			return nil
 		}
-		m.selectedTranslation = newTrans
-		m.mode = modeReader
-		m.loading = true
-		return loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter)
+		next, cmd := m.chooseTranslation(newTrans)
+		*m = next
+		return cmd
 	case modeCacheManager:
 		if m.translations == nil {
 			return nil
@@ -174,6 +167,9 @@ func (m *Model) overlayClick(row int) tea.Cmd {
 		}
 		m.cacheSelected = idx
 		trans := m.translations[idx].ShortName
+		if !translations.IsBuiltin(trans) {
+			return nil
+		}
 		if m.cache != nil && !m.cache.IsCached(trans) && m.downloadingTranslation == "" {
 			m.downloadingTranslation = trans
 			m.downloadProgress = 0

@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"omasword/internal/api"
+	"omasword/internal/esv"
 	"omasword/internal/translations"
 	"strings"
 
@@ -152,7 +154,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			for i := 1; i <= 31; i++ {
 				verses = append(verses, i)
 			}
-			return m, loadParallelVerses(m.client, m.comparisonTranslations, m.currentBook, m.currentChapter, verses), true
+			return m, m.loadReadingParallel(m.comparisonTranslations, m.currentBook, m.currentChapter, verses), true
 		}
 	case "r":
 		// Don't intercept 'r' when typing in search inputs
@@ -177,7 +179,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 					}
 				}
 			}
-			return m, nil, true
+			return m, m.checkESVKey(), true
 		}
 	case "d":
 		if m.mode == modeReader {
@@ -240,30 +242,32 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				}
 			}
 
+			if m.selectedTranslation == esv.ID {
+				textToCopy.WriteString("\n")
+				textToCopy.WriteString(esv.Attribution(m.displayedESVNotice()))
+				textToCopy.WriteString("\n")
+			}
 			clipboard.WriteAll(textToCopy.String())
 		}
 	case "enter":
+		if m.mode == modeESVKey {
+			m, cmd := m.commitESVKey()
+			return m, cmd, true
+		}
 		if m.mode == modeTranslationSelect && m.translations != nil && m.translationSelected < len(m.translations) {
-			newTrans := m.translations[m.translationSelected].ShortName
-			// Picker was opened from a comparison column header:
-			// swap that column instead of changing the main reader.
-			if m.comparisonPickerColumn >= 0 && m.comparisonPickerColumn < len(m.comparisonTranslations) {
-				m.comparisonTranslations[m.comparisonPickerColumn] = newTrans
-				m.comparisonPickerColumn = -1
-				m.mode = modeComparison
-				m.loading = true
-				return m, loadParallelVerses(m.client, m.comparisonTranslations, m.currentBook, m.currentChapter, m.comparisonVerseList()), true
-			}
-			m.selectedTranslation = newTrans
-			m.mode = modeReader
-			m.loading = true
-			return m, tea.Batch(
-				loadBooks(m.client, m.selectedTranslation),
-				loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter),
-			), true
+			m, cmd := m.chooseTranslation(m.translations[m.translationSelected].ShortName)
+			return m, cmd, true
 		} else if m.mode == modeCacheManager && m.translations != nil && m.cacheSelected < len(m.translations) {
 			// Download selected translation
 			translation := m.translations[m.cacheSelected].ShortName
+			if translation == esv.ID {
+				m.err = errors.New("ESV is online-only; it is not downloaded")
+				return m, nil, true
+			}
+			if !translations.IsBuiltin(translation) {
+				m.err = errors.New("offline download is limited to public-domain translations")
+				return m, nil, true
+			}
 			if m.cache != nil && !m.cache.IsCached(translation) {
 				m.downloadingTranslation = translation
 				m.downloadProgress = 0
@@ -280,7 +284,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				m.loading = true
 				m.highlightedVerseStart = 0
 				m.highlightedVerseEnd = 0
-				return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter), true
+				return m, m.loadReadingChapter(m.currentBook, m.currentChapter), true
 			}
 		} else if m.mode == modeSearch {
 			input := m.textInput.Value()
@@ -300,7 +304,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				m.mode = modeReader
 				m.loading = true
 				m.textInput.SetValue("")
-				return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter), true
+				m = m.withESVAnchor(m.currentBook, m.currentChapter, verseStart)
+				return m, m.loadReadingChapter(m.currentBook, m.currentChapter), true
 			}
 		} else if m.mode == modeWordSearch {
 			if m.wordSearchResults == nil && !m.wordSearchLoading {
@@ -327,12 +332,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 							m.loading = true
 							m.wordSearchInput.SetValue("")
 							m.wordSearchInput.Blur()
-							return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter), true
+							m = m.withESVAnchor(m.currentBook, m.currentChapter, vs)
+							return m, m.loadReadingChapter(m.currentBook, m.currentChapter), true
 						}
 					}
 					m.wordSearchLoading = true
 					m.wordSearchInput.Blur()
-					return m, loadSearchResults(m.client, m.selectedTranslation, query), true
+					return m, m.loadReadingSearch(query), true
 				}
 			} else if m.wordSearchResults != nil && len(m.wordSearchResults) > 0 {
 				// Navigate to selected result
@@ -352,7 +358,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 
 				m.mode = modeReader
 				m.loading = true
-				return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter), true
+				m = m.withESVAnchor(m.currentBook, m.currentChapter, result.Verse)
+				return m, m.loadReadingChapter(m.currentBook, m.currentChapter), true
 			}
 		} else if m.mode == modeTranslationSelect {
 			// The list has not loaded yet. Cycle the public-domain
@@ -368,8 +375,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.mode = modeReader
 			m.loading = true
 			return m, tea.Batch(
-				loadBooks(m.client, m.selectedTranslation),
-				loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter),
+				m.loadReadingBooks(),
+				m.loadReadingChapter(m.currentBook, m.currentChapter),
 			), true
 		}
 	case "x":
@@ -382,6 +389,31 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				}
 			}
 			return m, nil, true
+		}
+	case "a":
+		// In the translation picker, "a" opens the ESV key wizard.
+		// "k" is already "up", so it can't be the key shortcut.
+		if m.mode == modeTranslationSelect {
+			m.mode = modeESVKey
+			m.esvKeyThenSelect = false
+			m.esvKeyInput.SetValue("")
+			m.esvKeyInput.Focus()
+			m.err = nil
+			return m, nil, true
+		}
+	case ",":
+		if m.mode == modeReader && m.selectedTranslation == esv.ID && m.esvFirst > 1 {
+			m.esvPageBook, m.esvPageChapter = m.currentBook, m.currentChapter
+			m.esvPageStart = esv.PageStart(m.currentBook, m.esvFirst-1)
+			m.loading = true
+			return m, m.loadReadingChapter(m.currentBook, m.currentChapter), true
+		}
+	case ".":
+		if m.mode == modeReader && m.selectedTranslation == esv.ID && m.esvTotal > m.esvLast && m.esvLast > 0 {
+			m.esvPageBook, m.esvPageChapter = m.currentBook, m.currentChapter
+			m.esvPageStart = m.esvLast + 1
+			m.loading = true
+			return m, m.loadReadingChapter(m.currentBook, m.currentChapter), true
 		}
 	case "X":
 		// Remove every downloaded translation that is no longer offered.
@@ -399,6 +431,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			return m, loadCachedList(m.cache), true
 		}
 	case "esc":
+		if m.mode == modeESVKey {
+			m.esvKeyThenSelect = false
+			m.esvKeyInput.SetValue("")
+			m.mode = modeTranslationSelect
+			return m, nil, true
+		}
 		if m.mode == modeCacheManager {
 			m.mode = modeReader
 			return m, nil, true

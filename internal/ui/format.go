@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"omasword/internal/api"
+	"omasword/internal/esv"
 	"strconv"
 	"strings"
 
@@ -330,7 +331,29 @@ func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, w
 		}
 	}
 
+	if m.selectedTranslation == esv.ID {
+		sb.WriteString(m.esvNoticeBlock(width))
+	}
 	return sb.String()
+}
+
+// esvNoticeBlock is the Crossway copyright notice, the esv.org link, and
+// a paging hint when this chapter was clipped to the per-page cap.
+func (m Model) esvNoticeBlock(width int) string {
+	if width < 20 {
+		width = 20
+	}
+	var text strings.Builder
+	if m.esvTotal > 0 && (m.esvFirst > 1 || m.esvLast < m.esvTotal) {
+		fmt.Fprintf(&text, "Showing verses %d–%d of %d. Press , or . for another page. …\n", m.esvFirst, m.esvLast, m.esvTotal)
+	}
+	text.WriteString(esv.Attribution(m.displayedESVNotice()))
+	style := lipgloss.NewStyle().
+		Foreground(m.currentTheme.Muted).
+		Background(m.currentTheme.Background).
+		Italic(true).
+		Width(width)
+	return "\n" + style.Render(wrapText(text.String(), width)) + "\n"
 }
 
 func wrapText(text string, width int) string {
@@ -533,7 +556,13 @@ func (m Model) formatParallelVerses(versesMap map[string][]api.Verse, translatio
 		rows = append(rows, strings.Join(repeatString(blankRow, n), gutter))
 	}
 
-	return strings.Join(rows, "\n")
+	body := strings.Join(rows, "\n")
+	for _, name := range translations {
+		if name == esv.ID {
+			return body + "\n" + m.esvNoticeBlock(width)
+		}
+	}
+	return body
 }
 
 func repeatString(s string, n int) []string {

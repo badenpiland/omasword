@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"omasword/internal/translations"
+	"omasword/internal/esv"
 	"omasword/internal/version"
 	"strings"
 
@@ -139,7 +139,7 @@ func (m Model) renderTranslationSelect() string {
 				name += "  ●"
 			}
 			content.WriteString(style.Render(prefix+name) + "\n")
-			flavor := translations.LookupFlavor(trans.ShortName)
+			flavor := m.translationFlavor(trans.ShortName)
 			flavorStyle := mutedStyle
 			if i == m.translationSelected {
 				flavorStyle = selectedStyle
@@ -154,6 +154,44 @@ func (m Model) renderTranslationSelect() string {
 	}
 
 	return containerStyle.Render(content.String())
+}
+
+func (m Model) renderESVKey() string {
+	bg := m.currentTheme.Background
+	titleStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Bold(true)
+	bodyStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Primary).Background(bg)
+	hintStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Muted).Background(bg).Italic(true)
+
+	width := 72
+	if m.width-leftPaneOuterWidth-6 < width && m.width > 0 {
+		width = m.width - leftPaneOuterWidth - 6
+	}
+	if width < 48 {
+		width = 48
+	}
+	innerW := width - 6
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.currentTheme.BorderActive).
+		BorderBackground(bg).
+		Background(bg).
+		Width(width).
+		Padding(1, 2)
+
+	ti := m.esvKeyInput
+	ti.SetStyles(m.themedInputStyles())
+	ti.SetWidth(innerW - 2)
+
+	var body strings.Builder
+	body.WriteString(titleStyle.Render("ESV API key") + "\n\n")
+	body.WriteString(bodyStyle.Render("The ESV is online-only, with your own non-commercial key from Crossway. Create one at https://api.esv.org/ and paste it here.") + "\n\n")
+	body.WriteString(ti.View() + "\n\n")
+	body.WriteString(hintStyle.Render("Enter stores the key in the system keyring (gnome-keyring or KeePassXC). An empty line deletes it. A password manager can print the key via esv_api_key_cmd in config.json. OMASWORD_ESV_API_KEY is for one command only and is never saved."))
+	if m.err != nil {
+		errStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Error).Background(bg)
+		body.WriteString("\n\n" + errStyle.Render(m.err.Error()))
+	}
+	return box.Render(body.String())
 }
 
 func (m Model) renderCacheManager() string {
@@ -223,7 +261,9 @@ func (m Model) renderCacheManager() string {
 				style = selectedStyle
 			}
 			name := fmt.Sprintf("%-6s · %s", trans.ShortName, trans.FullName)
-			if isDownloading {
+			if trans.ShortName == "ESV" {
+				suffix = "  online only"
+			} else if isDownloading {
 				suffix = "  ⟳ downloading"
 				if i != m.cacheSelected {
 					style = downloadingStyle
@@ -304,6 +344,11 @@ func (m Model) renderAbout() string {
 	content.WriteString(labelStyle.Render("Fork of: ") + linkStyle.Render("github.com/kmf/sword-tui") + "\n")
 	content.WriteString(labelStyle.Render("API:     ") + valueStyle.Render("bolls.life") + "\n")
 	content.WriteString(labelStyle.Render("Texts:   ") + valueStyle.Render("public domain, BSB default") + "\n")
+	esvLine := "add a key from api.esv.org"
+	if m.esvClient != nil && m.esvClient.HasKey() {
+		esvLine = "key set, online only"
+	}
+	content.WriteString(labelStyle.Render("ESV:     ") + valueStyle.Render(esvLine) + "\n")
 	content.WriteString(labelStyle.Render("License: ") + valueStyle.Render("GPL-2.0-or-later") + "\n\n")
 
 	content.WriteString(titleStyle.Render("Shortcuts") + "\n\n")
@@ -534,6 +579,10 @@ func (m Model) renderWordSearch() string {
 		if below > 0 {
 			content.WriteString(mutedStyle.Render(fmt.Sprintf("  ↓ %d more", below)))
 		}
+	}
+
+	if m.selectedTranslation == esv.ID && (m.wordSearchResults != nil || m.wordSearchLoading) {
+		content.WriteString("\n" + mutedStyle.Render(wrapText(esv.Attribution(m.displayedESVNotice()), innerW)))
 	}
 
 	return containerStyle.Render(content.String())
