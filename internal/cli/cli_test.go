@@ -320,6 +320,91 @@ func TestLegacyKeyMigrationIsNotPrinted(t *testing.T) {
 	}
 }
 
+func TestFlagsAfterPositionalReference(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	args := []string{"Psalm 23:1-3", "--translation", "ESV", "--json"}
+	opt, err := parseArgs(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opt.passage != "Psalm 23:1-3" || opt.translation != "ESV" || !opt.json || !opt.explicit {
+		t.Fatalf("parsed %+v", opt)
+	}
+	got, err := parsePassage(opt.passage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.book != 19 || got.chapter != 23 || got.start != 1 || got.end != 3 || got.whole {
+		t.Fatalf("reference = %+v", got)
+	}
+	var out, errBuf bytes.Buffer
+	if code := RunWith(&out, &errBuf, args); code != ExitNotAllowed {
+		t.Fatalf("code %d, stderr %s, stdout %s", code, errBuf.String(), out.String())
+	}
+	if strings.Contains(errBuf.String(), "bad verse") || strings.Contains(errBuf.String(), "--json") {
+		t.Fatalf("flags were glued into the reference: %s", errBuf.String())
+	}
+
+	opt, err = parseArgs([]string{"--json", "--translation=WEB", "John", "3:16"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opt.passage != "John 3:16" || opt.translation != "WEB" || !opt.json {
+		t.Fatalf("flags before the reference parsed as %+v", opt)
+	}
+}
+
+func TestUsageErrorsExit1(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	cases := [][]string{
+		nil,
+		{"--passage"},
+		{"--no-such-flag"},
+		{"--passage", "Not A Book 1:1"},
+		{"--passage", "John 3:0"},
+		{"--passage", "John 3:5-2"},
+		{"--passage", "John 3:16", "--search", "love"},
+		{"Psalm 23:1-3", "--translation"},
+	}
+	for _, args := range cases {
+		var out, errBuf bytes.Buffer
+		code := RunWith(&out, &errBuf, args)
+		if code != ExitUsage {
+			t.Errorf("%q exit %d, want %d; stderr %s", args, code, ExitUsage, errBuf.String())
+		}
+		if code == ExitOK {
+			t.Errorf("%q exited 0", args)
+		}
+	}
+}
+
+func TestEmptyRequestedVerseExits3(t *testing.T) {
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	src := &fakeESV{key: true, page: esv.Passage{
+		Verses: []api.Verse{{Verse: 5, Text: "Jesus answered."}},
+		First:  5, Last: 5, Total: 36,
+		Notice: esv.CopyrightNotice,
+	}}
+	opt := options{passage: "John 3:16", translation: "ESV", explicit: true, json: true}
+	var out, errBuf bytes.Buffer
+	code := execute(&out, &errBuf, opt, &fakeBolls{}, src)
+	if code != ExitFetch {
+		t.Fatalf("code %d, stdout %q stderr %q", code, out.String(), errBuf.String())
+	}
+	if strings.TrimSpace(out.String()) != "" {
+		t.Fatalf("empty verse still printed a body: %s", out.String())
+	}
+	if !strings.Contains(errBuf.String(), "no text") {
+		t.Fatalf("stderr = %s", errBuf.String())
+	}
+}
+
 func TestWantsCLI(t *testing.T) {
 	if WantsCLI(nil) || WantsCLI([]string{"--version"}) {
 		t.Fatal("the TUI and --version are not the CLI mode")

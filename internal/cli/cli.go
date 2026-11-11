@@ -95,10 +95,15 @@ func parseArgs(args []string) (options, error) {
 	fs.StringVar(&opt.passage, "passage", "", "")
 	fs.StringVar(&opt.search, "search", "", "")
 	fs.StringVar(&opt.translation, "translation", "", "")
-	if err := fs.Parse(args); err != nil {
+	// Flag parsing stops at the first non-flag. Move flags in front so
+	// `omasword "Psalm 23:1-3" --translation ESV --json` works.
+	if err := fs.Parse(reorderArgs(args)); err != nil {
 		return options{}, fmt.Errorf("usage: %s", err)
 	}
 	opt.explicit = opt.translation != ""
+	if opt.passage != "" && fs.NArg() > 0 {
+		return options{}, fmt.Errorf("give the reference once, either as the argument or as --passage")
+	}
 	if opt.passage == "" && opt.search == "" && fs.NArg() > 0 {
 		opt.passage = strings.Join(fs.Args(), " ")
 	}
@@ -122,6 +127,54 @@ func parseArgs(args []string) (options, error) {
 		opt.translation = resolveDefault(cfg.SelectedTranslation, opt.key)
 	}
 	return opt, nil
+}
+
+// reorderArgs puts flags and their values before positional arguments
+// so a reference can come before or after the flags.
+func reorderArgs(args []string) []string {
+	var flags, pos []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			pos = append(pos, args[i+1:]...)
+			break
+		}
+		if !isFlag(a) {
+			pos = append(pos, a)
+			continue
+		}
+		name, hasValue := splitFlag(a)
+		flags = append(flags, a)
+		if hasValue || !flagTakesValue(name) {
+			continue
+		}
+		if i+1 < len(args) && !isFlag(args[i+1]) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	return append(flags, pos...)
+}
+
+func isFlag(a string) bool {
+	return len(a) > 1 && a[0] == '-'
+}
+
+func splitFlag(a string) (name string, hasValue bool) {
+	a = strings.TrimLeft(a, "-")
+	if i := strings.IndexByte(a, '='); i >= 0 {
+		return a[:i], true
+	}
+	return a, false
+}
+
+func flagTakesValue(name string) bool {
+	switch name {
+	case "passage", "search", "translation":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveDefault(saved, key string) string {
@@ -270,6 +323,10 @@ func runPassage(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient
 		}
 		verses = filterVerses(got, wanted)
 	}
+	if !hasVerseText(verses) {
+		fmt.Fprintf(stderr, "no text for %s\n", wanted.label)
+		return ExitFetch
+	}
 	// A second clip, in case a caller handed back more ESV text than
 	// Crossway allows on one page.
 	if opt.translation == esv.ID && len(verses) > esv.MaxVerses(wanted.book) {
@@ -355,6 +412,15 @@ func runSearch(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient 
 		fmt.Fprintln(stdout, esv.Attribution(""))
 	}
 	return ExitOK
+}
+
+func hasVerseText(verses []api.Verse) bool {
+	for _, v := range verses {
+		if strings.TrimSpace(v.Text) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func filterVerses(verses []api.Verse, wanted ref) []api.Verse {
