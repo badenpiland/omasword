@@ -147,13 +147,39 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			}
 			return m, nil, true
 		}
-	case "c":
-		if m.mode == modeReader {
-			m.mode = modeComparison
-			verses := []int{}
-			for i := 1; i <= 31; i++ {
-				verses = append(verses, i)
+	case "+", "=", "-":
+		// In comparison, + adds a column and - removes the last one.
+		// The count is saved and used the next time comparison opens.
+		// Only the added column is fetched; the others are already on
+		// screen, and a removed column is just not drawn.
+		if m.mode == modeComparison {
+			n := len(m.comparisonTranslations)
+			var cmd tea.Cmd
+			switch {
+			case msg.String() != "-" && n < translations.MaxComparison:
+				name := translations.NextComparison(m.comparisonTranslations)
+				m.comparisonTranslations = append(m.comparisonTranslations, name)
+				cmd = m.loadComparisonColumn(name)
+			case msg.String() == "-" && n > translations.MinComparison:
+				m.comparisonTranslations = m.comparisonTranslations[:n-1]
+			default:
+				return m, nil, true
 			}
+			_ = m.saveSettings()
+			m.rerenderContent()
+			return m, cmd, true
+		}
+	case "c":
+		// c toggles comparison: once to open it, again to go back.
+		if m.mode == modeComparison {
+			m, cmd := m.backToReader()
+			return m, cmd, true
+		}
+		if m.mode == modeReader {
+			// Ask for every verse of the loaded chapter; a fixed 1–31
+			// cut long chapters such as Psalm 119 short.
+			verses := m.comparisonVerseList()
+			m.mode = modeComparison
 			return m, m.loadReadingParallel(m.comparisonTranslations, m.currentBook, m.currentChapter, verses), true
 		}
 	case "r":
@@ -163,8 +189,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 		} else if m.mode == modeWordSearch && m.wordSearchResults == nil && !m.wordSearchLoading {
 			// Let it pass through to word search input
 		} else if m.mode != modeReader {
-			m.mode = modeReader
-			return m, nil, true
+			m, cmd := m.backToReader()
+			return m, cmd, true
 		}
 	case "t":
 		if m.mode == modeReader {
@@ -450,10 +476,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				m.mode = modeComparison
 				return m, nil, true
 			}
-			m.mode = modeReader
 			m.wordSearchResults = nil
 			m.wordSearchInput.SetValue("")
-			return m, nil, true
+			m, cmd := m.backToReader()
+			return m, cmd, true
 		}
 		if m.focus == paneBooks {
 			m.focus = paneContent
@@ -461,4 +487,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 		}
 	}
 	return m, nil, false
+}
+
+// backToReader returns to the reader. Showing a comparison replaces the
+// reading pane and drops the loaded chapter, so leaving one (or a
+// translation picker opened from one of its columns) reloads the chapter.
+func (m Model) backToReader() (Model, tea.Cmd) {
+	fromComparison := m.mode == modeComparison || m.comparisonPickerColumn >= 0
+	m.mode = modeReader
+	m.comparisonPickerColumn = -1
+	if !fromComparison {
+		return m, nil
+	}
+	m.loading = true
+	return m, m.loadReadingChapter(m.currentBook, m.currentChapter)
 }

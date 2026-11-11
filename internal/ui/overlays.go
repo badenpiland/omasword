@@ -359,7 +359,7 @@ func (m Model) renderAbout() string {
 		{"/", "go to verse"},
 		{"v", "browse to a passage"},
 		{"s", "search Bible"},
-		{"c", "compare translations"},
+		{"c", "compare translations (c again closes, +/- columns)"},
 		{"t", "select translation"},
 		{"d", "download translations"},
 		{"y", "yank current verse"},

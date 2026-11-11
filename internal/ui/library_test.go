@@ -86,7 +86,7 @@ func TestSavedPublicDomainTranslationIsKept(t *testing.T) {
 func TestNewModelComparisonIsPublicDomain(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	m := NewModel()
-	if strings.Join(m.comparisonTranslations, ",") != "BSB,KJV,WEB" {
+	if strings.Join(m.comparisonTranslations, ",") != "BSB,KJV" {
 		t.Fatalf("comparison = %v", m.comparisonTranslations)
 	}
 }

@@ -34,8 +34,20 @@ func TestNamedPublicDomainTextsStay(t *testing.T) {
 }
 
 func TestComparisonIsPublicDomain(t *testing.T) {
-	got := Comparison()
-	if len(got) != 3 || got[0] != Default {
+	if got := Comparison(0); len(got) != DefaultComparison || got[0] != Default {
+		t.Fatalf("Comparison(0) = %v, want %d columns, BSB first", got, DefaultComparison)
+	}
+	if got := Comparison(9); len(got) != MaxComparison {
+		t.Fatalf("Comparison(9) = %v, want %d", got, MaxComparison)
+	}
+	if got := Comparison(1); len(got) != MinComparison {
+		t.Fatalf("Comparison(1) = %v, want %d", got, MinComparison)
+	}
+	if got := NextComparison([]string{"BSB", "KJV"}); got != "WEB" {
+		t.Fatalf("NextComparison = %s, want WEB", got)
+	}
+	got := Comparison(MaxComparison)
+	if got[0] != Default {
 		t.Fatalf("Comparison() = %v, want BSB first", got)
 	}
 	for _, name := range got {

@@ -224,6 +224,7 @@ func NewModel() Model {
 	// BSB reader never touches the keyring or runs esv_api_key_cmd (which
 	// may prompt for a password) at launch.
 	keyCmd := ""
+	comparisonColumns := 0
 	savedKey := ""
 	esvKeyChecked := false
 	fellBack := false
@@ -234,6 +235,7 @@ func NewModel() Model {
 
 	if err == nil {
 		keyCmd = cfg.ESVAPIKeyCmd
+		comparisonColumns = cfg.ComparisonColumns
 		if cfg.SelectedTranslation == esv.ID {
 			savedKey = esv.Resolve(keyCmd)
 			esvKeyChecked = true
@@ -264,7 +266,7 @@ func NewModel() Model {
 		currentChapter:         currentChapter,
 		currentBookName:        fallbackBookName(currentBook), // replaced when books load
 		mode:                   modeReader,
-		comparisonTranslations: translations.Comparison(),
+		comparisonTranslations: translations.Comparison(comparisonColumns),
 		currentTheme:           currentTheme,
 		focus:                  paneContent,
 		progressBar:            progress.New(progress.WithDefaultBlend(), progress.WithoutPercentage()),

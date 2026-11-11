@@ -50,13 +50,7 @@ func (m Model) calculateHighlightedVerse() int {
 	// Calculate which verse is at the top of the viewport
 	yOffset := m.viewport.YOffset()
 
-	// Calculate text width the same way formatChapter does. We use the
-	// viewport's width (not m.width — that's the full terminal) and
-	// match formatChapter's `width - 8` for the textWidth.
-	textWidth := m.viewport.Width() - 8
-	if textWidth < 12 {
-		textWidth = 12
-	}
+	textWidth := readerTextWidth(m.viewport.Width())
 
 	// Count lines to find which verse we're at
 	currentLine := 0
@@ -120,14 +114,7 @@ func (m *Model) scrollToHighlightedVerse() {
 	// This must match exactly how formatChapter renders verses
 	currentLine := 0
 
-	// Calculate text width the same way formatChapter does
-	textWidth := m.width - 6
-	if textWidth < 20 {
-		textWidth = 20
-	}
-	if textWidth > m.width-2 {
-		textWidth = m.width - 2
-	}
+	textWidth := readerTextWidth(m.viewport.Width())
 
 	for i, verse := range m.currentVerses {
 		if verse.Verse == m.highlightedVerseStart {
@@ -191,6 +178,14 @@ func (m *Model) scrollToHighlightedVerse() {
 	}
 }
 
+// readerTextWidth is the width verse text wraps to in the reader: the
+// viewport less the right-aligned verse number (4) and its gap (2). The
+// highlighted-verse box costs the same 6 cells in border and padding.
+// Scrolling and mouse hit-testing must use this same width.
+func readerTextWidth(viewportWidth int) int {
+	return max(viewportWidth-6, 20)
+}
+
 func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, width int, highlightedVerseStart, highlightedVerseEnd int) string {
 	bg := m.currentTheme.Background
 	hbg := m.currentTheme.Highlight
@@ -241,18 +236,7 @@ func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, w
 
 	var sb strings.Builder
 
-	// Calculate available width for text. Verse number is right-aligned
-	// in 4 chars + 2 spaces = 6 chars total. We leave an extra 2 cells of
-	// safety so the highlighted-verse rounded box (which costs 6 cells of
-	// border+padding around the inner text) doesn't equal viewport width
-	// exactly (lipgloss wraps on exact-width matches).
-	textWidth := width - 8
-	if textWidth < 20 {
-		textWidth = 20 // Minimum width for readability
-	}
-	if textWidth > width-2 {
-		textWidth = width - 2
-	}
+	textWidth := readerTextWidth(width)
 
 	// Track if we're currently in a highlighted range
 	inHighlightedRange := false

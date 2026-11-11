@@ -113,7 +113,7 @@ The default translation is the BSB. `--json` prints one JSON object. Exit codes 
 - `/` - Search by verse reference
 - `s` - Word search
 - `v` - Browse to a passage: Books → Chapters → Verses columns (`/` filters a column, `Enter` opens the verse)
-- `c` - Comparison view (side-by-side translations)
+- `c` - Comparison view (side-by-side translations); press `c` again to close it. In comparison, `+` and `-` add or remove a column (2 to 4, default 2); the count is saved
 - `t` - Translation picker (`a` in that picker sets or clears an ESV API key)
 - `,` / `.` - Previous / next ESV page, when a chapter is longer than Crossway's per-page limit
 - `d` - Cache manager (`x` deletes a cached translation here)
