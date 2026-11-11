@@ -32,10 +32,54 @@ var Builtins = []Info{
 	{ShortName: "DRB", FullName: "Douay-Rheims Bible", Flavor: "Formal word-for-word from the Latin Vulgate"},
 }
 
-// Comparison is the side-by-side set opened by the comparison view:
-// the default, a classic formal text, and a modern one that reads differently.
-func Comparison() []string {
-	return []string{Default, "KJV", "WEB"}
+// The comparison view shows between MinComparison and MaxComparison
+// columns, DefaultComparison unless the config says otherwise.
+const (
+	MinComparison     = 2
+	MaxComparison     = 4
+	DefaultComparison = 2
+)
+
+// comparisonOrder is the order columns are added in: the default, a
+// classic formal text, a modern one that reads differently, then another
+// formal text.
+var comparisonOrder = []string{Default, "KJV", "WEB", "ASV"}
+
+// Comparison is the first n translations for the comparison view. n is
+// clamped to MinComparison..MaxComparison, and 0 means the default.
+func Comparison(n int) []string {
+	return append([]string(nil), comparisonOrder[:ComparisonCount(n)]...)
+}
+
+// ComparisonCount clamps a saved column count, with 0 meaning the default.
+func ComparisonCount(n int) int {
+	switch {
+	case n == 0:
+		return DefaultComparison
+	case n < MinComparison:
+		return MinComparison
+	case n > MaxComparison:
+		return MaxComparison
+	}
+	return n
+}
+
+// NextComparison is a translation to add as a new column: the first in
+// comparison order not already shown.
+func NextComparison(shown []string) string {
+	for _, name := range comparisonOrder {
+		used := false
+		for _, s := range shown {
+			if s == name {
+				used = true
+				break
+			}
+		}
+		if !used {
+			return name
+		}
+	}
+	return Default
 }
 
 // Lookup returns the catalog entry for a short name.

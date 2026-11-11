@@ -63,11 +63,7 @@ func (m Model) verseAtMouseY(y int) int {
 		return 0
 	}
 
-	// Same width math as formatChapter (width - 8 from viewport width).
-	textWidth := m.viewport.Width() - 8
-	if textWidth < 12 {
-		textWidth = 12
-	}
+	textWidth := readerTextWidth(m.viewport.Width())
 	indent := 6
 	currentLine := 0
 

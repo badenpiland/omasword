@@ -147,13 +147,34 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			}
 			return m, nil, true
 		}
-	case "c":
-		if m.mode == modeReader {
-			m.mode = modeComparison
-			verses := []int{}
-			for i := 1; i <= 31; i++ {
-				verses = append(verses, i)
+	case "+", "=", "-":
+		// In comparison, + adds a column and - removes the last one.
+		// The count is saved and used the next time comparison opens.
+		if m.mode == modeComparison {
+			n := len(m.comparisonTranslations)
+			switch {
+			case msg.String() != "-" && n < translations.MaxComparison:
+				m.comparisonTranslations = append(m.comparisonTranslations, translations.NextComparison(m.comparisonTranslations))
+			case msg.String() == "-" && n > translations.MinComparison:
+				m.comparisonTranslations = m.comparisonTranslations[:n-1]
+			default:
+				return m, nil, true
 			}
+			_ = m.saveSettings()
+			m.loading = true
+			return m, m.loadReadingParallel(m.comparisonTranslations, m.currentBook, m.currentChapter, m.comparisonVerseList()), true
+		}
+	case "c":
+		// c toggles comparison: once to open it, again to go back.
+		if m.mode == modeComparison {
+			m, cmd := m.backToReader()
+			return m, cmd, true
+		}
+		if m.mode == modeReader {
+			// Ask for every verse of the loaded chapter; a fixed 1–31
+			// cut long chapters such as Psalm 119 short.
+			verses := m.comparisonVerseList()
+			m.mode = modeComparison
 			return m, m.loadReadingParallel(m.comparisonTranslations, m.currentBook, m.currentChapter, verses), true
 		}
 	case "r":

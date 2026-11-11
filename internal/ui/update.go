@@ -468,6 +468,7 @@ func (m Model) saveSettings() error {
 		CurrentBook:         m.currentBook,
 		CurrentChapter:      m.currentChapter,
 		ESVAPIKeyCmd:        m.esvKeyCmd,
+		ComparisonColumns:   len(m.comparisonTranslations),
 	})
 }
 

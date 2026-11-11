@@ -26,7 +26,10 @@ func (m Model) View() tea.View {
 // viewport fills the pane's inner content area exactly (no unstyled gap
 // at the right edge).
 func (m Model) viewportSize() (int, int) {
-	w := m.width - leftPaneOuterWidth - 2 - 4
+	// The reading pane box is 2 narrower than its slot, then loses its
+	// border (2) and padding (4). Content wider than that is wrapped
+	// again by the box, which split comparison rows mid-line.
+	w := m.width - leftPaneOuterWidth - 2 - 2 - 4
 	if w < 20 {
 		w = 20
 	}
@@ -202,7 +205,7 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 			hs = []hint{{"⏎", "search"}, {"esc", "close"}}
 		}
 	case modeComparison:
-		hs = []hint{{"↑↓", "scroll"}, {"r", "reader"}, {"esc", "back"}}
+		hs = []hint{{"↑↓", "scroll"}, {"+/-", "columns"}, {"c", "close"}}
 	case modeSearch:
 		hs = []hint{{"⏎", "go"}, {"esc", "cancel"}}
 	case modePicker:
@@ -490,7 +493,7 @@ func (m Model) renderRightPane(outerW, outerH int) string {
 		body = errStyle.Render("Couldn't load this chapter") + "\n" + muted.Render("retrying…")
 	}
 
-	innerW := outerW - 2 - 4 // border + padding(1,2)
+	innerW := outerW - 2 - 2 - 4 // slot margin + border + padding(1,2)
 	spacer := lipgloss.NewStyle().Background(bg).Width(innerW).Render("")
 
 	content := header + "\n" + spacer + "\n" + body

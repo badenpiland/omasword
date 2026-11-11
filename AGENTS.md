@@ -91,8 +91,9 @@ go test ./...
 - `internal/esv`: Crossway's passage API. Verse cache and rate-limit
   journal live under `~/.cache/omasword` and do not contain the key.
 - `internal/settings`: `~/.config/omasword/config.json` (translation,
-  book, chapter, optional `esv_api_key_cmd`), written atomically. The
-  API key is not in this file. Migrates a sword-tui config on first run.
+  book, chapter, comparison column count, optional `esv_api_key_cmd`),
+  written atomically. The API key is not in this file. Migrates a
+  sword-tui config on first run.
 - `internal/ui`: the Bubble Tea model. The reading pane is pre-rendered
   into `m.content`; color or width changes call `rerenderContent`. Keys
   reach a text input only when `typingInInput` is true. Look books up by
