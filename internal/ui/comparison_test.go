@@ -123,3 +123,30 @@ func TestComparisonRowsFitTheReadingPane(t *testing.T) {
 		t.Fatalf("separator lines %d, verse rows %d; want 1 and 2:\n%s", separators, starts, view)
 	}
 }
+
+func TestPlusFetchesOneColumnAndMinusFetchesNothing(t *testing.T) {
+	m := inComparison(t) // BSB and KJV shown; WEB already loaded too
+	m, cmd := press(t, m, "+")
+	if cmd != nil || !strings.Contains(m.content, "WEB") {
+		t.Fatalf("WEB was loaded already, so + should draw it without fetching (cmd %v)", cmd != nil)
+	}
+	m, cmd = press(t, m, "+")
+	if cmd == nil {
+		t.Fatal("+ did not fetch the ASV column")
+	}
+	// The fetch for another chapter is dropped; the right one is drawn.
+	next, _ := m.Update(comparisonColumnMsg{book: 2, chapter: 1, translation: "ASV", verses: []api.Verse{{Verse: 1, Text: "wrong chapter"}}})
+	m = next.(Model)
+	next, _ = m.Update(comparisonColumnMsg{book: m.currentBook, chapter: m.currentChapter, translation: "ASV", verses: []api.Verse{{Verse: 1, Text: "In the beginning ASV"}}})
+	m = next.(Model)
+	if strings.Contains(m.content, "wrong chapter") || !strings.Contains(m.content, "ASV") {
+		t.Fatalf("ASV column not drawn correctly:\n%s", ansi.Strip(m.content))
+	}
+	m, cmd = press(t, m, "-")
+	if cmd != nil || strings.Contains(m.content, "ASV") {
+		t.Fatalf("- should drop ASV without fetching (cmd %v)", cmd != nil)
+	}
+	if _, cmd = press(t, m, "+"); cmd != nil {
+		t.Fatal("ASV was fetched again for the same chapter")
+	}
+}

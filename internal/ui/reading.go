@@ -110,6 +110,44 @@ func (m Model) loadSplitParallel(names []string, book, chapter int, verses []int
 	}
 }
 
+// comparisonColumnMsg is one column fetched for the comparison view.
+type comparisonColumnMsg struct {
+	book, chapter int
+	translation   string
+	verses        []api.Verse
+	err           error
+}
+
+// loadComparisonColumn fetches one translation's chapter for the
+// comparison view, or returns nil when this chapter already has it (a
+// column removed with - and added back). An offline download is used
+// when there is one.
+func (m Model) loadComparisonColumn(name string) tea.Cmd {
+	if m.currentParallelVerses != nil {
+		if _, ok := m.currentParallelVerses[name]; ok {
+			return nil
+		}
+	}
+	book, chapter := m.currentBook, m.currentChapter
+	client, esvClient := m.client, m.esvClient
+	return func() tea.Msg {
+		var verses []api.Verse
+		var err error
+		if name == esv.ID {
+			if esvClient == nil || !esvClient.HasKey() {
+				err = esv.ErrNoKey
+			} else {
+				var page esv.Passage
+				page, err = esvClient.Chapter(book, chapter, 1)
+				verses = page.Verses
+			}
+		} else {
+			verses, err = client.GetChapter(name, book, chapter)
+		}
+		return comparisonColumnMsg{book: book, chapter: chapter, translation: name, verses: verses, err: err}
+	}
+}
+
 func filterVerseNumbers(verses []api.Verse, want []int) []api.Verse {
 	if len(want) == 0 {
 		return verses

@@ -150,19 +150,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 	case "+", "=", "-":
 		// In comparison, + adds a column and - removes the last one.
 		// The count is saved and used the next time comparison opens.
+		// Only the added column is fetched; the others are already on
+		// screen, and a removed column is just not drawn.
 		if m.mode == modeComparison {
 			n := len(m.comparisonTranslations)
+			var cmd tea.Cmd
 			switch {
 			case msg.String() != "-" && n < translations.MaxComparison:
-				m.comparisonTranslations = append(m.comparisonTranslations, translations.NextComparison(m.comparisonTranslations))
+				name := translations.NextComparison(m.comparisonTranslations)
+				m.comparisonTranslations = append(m.comparisonTranslations, name)
+				cmd = m.loadComparisonColumn(name)
 			case msg.String() == "-" && n > translations.MinComparison:
 				m.comparisonTranslations = m.comparisonTranslations[:n-1]
 			default:
 				return m, nil, true
 			}
 			_ = m.saveSettings()
-			m.loading = true
-			return m, m.loadReadingParallel(m.comparisonTranslations, m.currentBook, m.currentChapter, m.comparisonVerseList()), true
+			m.rerenderContent()
+			return m, cmd, true
 		}
 	case "c":
 		// c toggles comparison: once to open it, again to go back.

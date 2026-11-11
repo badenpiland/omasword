@@ -339,6 +339,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.content = m.formatParallelVerses(msg.verses, m.comparisonTranslations, m.currentBookName, m.currentChapter, m.viewport.Width())
 		m.viewport.SetContent(m.content)
 		m.viewport.GotoTop()
+		// A column added with + while this load was running isn't in it.
+		for _, name := range m.comparisonTranslations {
+			if _, ok := msg.verses[name]; !ok {
+				cmds = append(cmds, m.loadComparisonColumn(name))
+			}
+		}
+
+	case comparisonColumnMsg:
+		// Drop a column that arrives after the chapter changed.
+		if msg.book != m.currentBook || msg.chapter != m.currentChapter || m.currentParallelVerses == nil {
+			break
+		}
+		if msg.err != nil {
+			m.err = msg.err
+			break
+		}
+		m.currentParallelVerses[msg.translation] = msg.verses
+		m.rerenderContent()
 
 	case cacheListLoadedMsg:
 		m.cachedTranslations = msg.translations
