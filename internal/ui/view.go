@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func (m Model) View() tea.View {
@@ -165,7 +166,9 @@ func (m Model) renderStatusBar() string {
 	if leftW < 1 {
 		leftW = 1
 	}
-	hintsSlot := rightStyle.Width(leftW).MaxWidth(leftW).Render(hints)
+	// Cut the hints rather than wrap them: a second line would push the
+	// bottom border off the screen.
+	hintsSlot := rightStyle.Width(leftW).Render(ansi.Truncate(hints, leftW, "…"))
 	gap := lipgloss.NewStyle().Background(bg).Render(" ")
 
 	box := lipgloss.NewStyle().
@@ -286,7 +289,10 @@ func (m Model) renderLeftPane(outerW, outerH int) string {
 		contentLines = 1
 	}
 
-	if m.books == nil {
+	if m.books == nil && m.booksErr != nil {
+		errStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Error).Background(bg)
+		sb.WriteString(errStyle.Render("Couldn't load books") + "\n" + mutedStyle.Render("retrying…"))
+	} else if m.books == nil {
 		sb.WriteString(mutedStyle.Render("Loading…"))
 	} else {
 		type entry struct {
@@ -476,6 +482,11 @@ func (m Model) renderRightPane(outerW, outerH int) string {
 	header := title + locator
 
 	body := m.viewport.View()
+	if m.mode == modeReader && m.currentVerses == nil && m.err != nil {
+		errStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Error).Background(bg)
+		muted := lipgloss.NewStyle().Foreground(m.currentTheme.Muted).Background(bg)
+		body = errStyle.Render("Couldn't load this chapter") + "\n" + muted.Render("retrying…")
+	}
 
 	innerW := outerW - 2 - 4 // border + padding(1,2)
 	spacer := lipgloss.NewStyle().Background(bg).Width(innerW).Render("")

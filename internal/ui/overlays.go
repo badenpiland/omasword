@@ -150,7 +150,7 @@ func (m Model) renderTranslationSelect() string {
 			content.WriteString(mutedStyle.Render(fmt.Sprintf("  ↓ %d more", len(m.translations)-end)))
 		}
 	} else {
-		content.WriteString(normalStyle.Render("  Loading translations..."))
+		content.WriteString(normalStyle.Render("  " + m.translationsLoadingText()))
 	}
 
 	return containerStyle.Render(content.String())
@@ -237,7 +237,7 @@ func (m Model) renderCacheManager() string {
 			content.WriteString(mutedStyle.Render(fmt.Sprintf("  ↓ %d more", len(m.translations)-end)))
 		}
 	} else {
-		content.WriteString(normalStyle.Render("  Loading translations..."))
+		content.WriteString(normalStyle.Render("  " + m.translationsLoadingText()))
 	}
 
 	// Live download progress bar, rendered just inside the panel below
@@ -528,4 +528,11 @@ func (m Model) renderWordSearch() string {
 	}
 
 	return containerStyle.Render(content.String())
+}
+
+func (m Model) translationsLoadingText() string {
+	if m.translationsErr != nil {
+		return "Couldn't load translations, retrying…"
+	}
+	return "Loading translations..."
 }

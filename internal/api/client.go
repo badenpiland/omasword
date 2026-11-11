@@ -3,10 +3,13 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,13 +28,24 @@ type CacheInterface interface {
 type Client struct {
 	httpClient *http.Client
 	cache      CacheInterface
+	// retryDelays are the waits before each retry of a request that was
+	// rate limited, hit a gateway error, or failed to connect. Its length
+	// is the number of retries.
+	retryDelays []time.Duration
+	sleep       func(time.Duration)
 }
 
 func NewClient() *Client {
 	return &Client{
-		httpClient: &http.Client{Timeout: requestTimeout},
+		httpClient:  &http.Client{Timeout: requestTimeout},
+		retryDelays: []time.Duration{1 * time.Second, 3 * time.Second},
+		sleep:       time.Sleep,
 	}
 }
+
+// maxRetryAfter is the longest Retry-After the client will wait out; a
+// server asking for more gets its error reported instead.
+const maxRetryAfter = 10 * time.Second
 
 func (c *Client) SetCache(cache CacheInterface) {
 	c.cache = cache
@@ -77,6 +91,9 @@ type ParallelVerseRequest struct {
 const maxErrorBody = 512
 
 func errorFromResponse(resp *http.Response) error {
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return errors.New("bolls.life is busy (too many requests)")
+	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 	msg := strings.TrimSpace(SanitizeText(string(body)))
 	if msg == "" {
@@ -85,22 +102,75 @@ func errorFromResponse(resp *http.Response) error {
 	return fmt.Errorf("API returned status %d: %s", resp.StatusCode, msg)
 }
 
+// retryable reports whether a failed response is worth repeating: rate
+// limits and gateway errors usually clear within seconds.
+func retryable(status int) bool {
+	switch status {
+	case http.StatusTooManyRequests, http.StatusBadGateway,
+		http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
+// retryAfter reads a Retry-After header given in seconds (the form
+// bolls.life and most rate limiters use); dates are ignored.
+func retryAfter(resp *http.Response) time.Duration {
+	secs, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After")))
+	if err != nil || secs < 0 {
+		return 0
+	}
+	return time.Duration(secs) * time.Second
+}
+
 // maxResponseBytes caps how much JSON one API response may decode. The
 // largest real responses (a long chapter, 500 search hits) are well under
 // 1 MiB.
 const maxResponseBytes = 16 << 20
 
-// doJSON sends req and decodes a 200 response into v.
+// doJSON sends req and decodes a 200 response into v, retrying rate
+// limits, gateway errors and connection failures a few times. Timeouts
+// are not retried: each attempt already waited requestTimeout.
 func (c *Client) doJSON(req *http.Request, v any) error {
+	for attempt := 0; ; attempt++ {
+		retry, wait, err := c.doJSONOnce(req, v)
+		if !retry || attempt >= len(c.retryDelays) {
+			return err
+		}
+		if wait > maxRetryAfter {
+			return err
+		}
+		c.sleep(max(wait, c.retryDelays[attempt]))
+		if req.GetBody != nil {
+			body, bodyErr := req.GetBody()
+			if bodyErr != nil {
+				return err
+			}
+			req.Body = body
+		}
+	}
+}
+
+// doJSONOnce makes one attempt. retry says whether the failure is worth
+// repeating, and wait is how long the server asked us to back off.
+func (c *Client) doJSONOnce(req *http.Request, v any) (retry bool, wait time.Duration, err error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		// Drop Go's "Get \"https://…\":" prefix; the status bar is short.
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return false, 0, errors.New("bolls.life timed out")
+		}
+		if inner := errors.Unwrap(err); inner != nil {
+			err = inner
+		}
+		return true, 0, fmt.Errorf("can't reach bolls.life (%w)", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return errorFromResponse(resp)
+		return retryable(resp.StatusCode), retryAfter(resp), errorFromResponse(resp)
 	}
-	return json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(v)
+	return false, 0, json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(v)
 }
 
 func (c *Client) getJSON(url string, v any) error {
