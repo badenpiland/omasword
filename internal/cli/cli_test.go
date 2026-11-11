@@ -3,13 +3,22 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"omasword/internal/api"
 	"omasword/internal/esv"
 	"omasword/internal/settings"
+
+	"github.com/zalando/go-keyring"
 )
+
+func TestMain(m *testing.M) {
+	keyring.MockInit()
+	os.Exit(m.Run())
+}
 
 type fakeBolls struct {
 	verses []api.Verse
@@ -237,6 +246,78 @@ func countVerseLines(s string) int {
 		}
 	}
 	return n
+}
+
+func TestOutputNeverContainsTheAPIKey(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := esv.SaveKey("test-key-not-real"); err != nil {
+		t.Fatal(err)
+	}
+	src := &fakeESV{key: true, page: esv.Passage{
+		Verses: []api.Verse{{Verse: 35, Text: "Jesus wept."}},
+		First:  35, Last: 35, Total: 57,
+		Notice: esv.CopyrightNotice,
+	}, err: errString("rejected test-key-not-real")}
+	opt := options{
+		passage: "John 11:35", translation: "ESV", explicit: true, json: true,
+		key: "test-key-not-real",
+	}
+	var out, errBuf bytes.Buffer
+	// A fetch error that echoes the key must be redacted.
+	if code := execute(&out, &errBuf, opt, &fakeBolls{}, src); code != ExitFetch {
+		t.Fatalf("code %d", code)
+	}
+	if strings.Contains(out.String()+errBuf.String(), "test-key-not-real") {
+		t.Fatal("fetch error printed the API key")
+	}
+	if !strings.Contains(errBuf.String(), "[redacted]") {
+		t.Fatal("expected the key to be redacted")
+	}
+
+	src.err = nil
+	out.Reset()
+	errBuf.Reset()
+	if code := execute(&out, &errBuf, opt, &fakeBolls{}, src); code != ExitOK {
+		t.Fatalf("code %d stderr %s", code, errBuf.String())
+	}
+	if strings.Contains(out.String(), "test-key-not-real") || strings.Contains(errBuf.String(), "test-key-not-real") {
+		t.Fatal("JSON output contains the API key")
+	}
+	if !strings.Contains(out.String(), "Jesus wept.") || !strings.Contains(out.String(), "esv.org") {
+		t.Fatalf("passage JSON = %s", out.String())
+	}
+}
+
+func TestLegacyKeyMigrationIsNotPrinted(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	cfg := filepath.Join(dir, "omasword")
+	if err := os.MkdirAll(cfg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := []byte(`{"selected_translation":"BSB","esv_api_key":"test-key-not-real"}`)
+	if err := os.WriteFile(filepath.Join(cfg, "config.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opt, err := parseArgs([]string{"--passage", "John 3:16", "--translation", "BSB"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(opt.notice, "test-key-not-real") || opt.key != "test-key-not-real" {
+		t.Fatal("migration leaked or dropped the key")
+	}
+	data, err := os.ReadFile(filepath.Join(cfg, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "test-key-not-real") || strings.Contains(string(data), "esv_api_key") {
+		t.Fatalf("config still has the key: %s", data)
+	}
 }
 
 func TestWantsCLI(t *testing.T) {

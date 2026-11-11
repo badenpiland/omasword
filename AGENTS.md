@@ -19,11 +19,7 @@ except as this section allows.
   downloader in `internal/cache`. bolls.life hosts those files; that is
   not permission to redistribute them.
 - The ESV is allowed only through `internal/esv`, with the user's own
-  key from <https://api.esv.org/>. The key comes from
-  `OMASWORD_ESV_API_KEY` or `esv_api_key` in the config file. Never commit
-  a real key, never put one in a fixture, and never log one (including
-  inside an error string or a URL). The config file is mode `0600` while
-  a key is stored. The environment variable is not written to disk.
+  key from <https://api.esv.org/>. See [Secrets](#secrets).
 - ESV is online-only. Do not bulk-download it. Any local cache stays
   within 500 verses and half of any one book, whichever is less, and
   evicts past that. One screen, including this CLI, shows no more than
@@ -38,6 +34,21 @@ except as this section allows.
 - Darby is public domain but bolls.life does not host it. A public-domain
   text that is not hosted there can be added later from the publisher's
   own files, not from a mirror that also hosts copyrighted Bibles.
+
+## Secrets
+
+No plaintext secrets in files, logs, tests, or commits.
+
+- The ESV API key is stored in the OS keyring (gnome-keyring or KeePassXC
+  via the Secret Service). Do not put it back in `config.json`, a cache
+  file, a fixture, a log, `--json` output, a panic, or an error string.
+- `esv_api_key_cmd` may be stored. It is a command. Its stdout is the key
+  and must not be written, logged, or attached to an error.
+- `OMASWORD_ESV_API_KEY` exists for one process (CI or a single command).
+  Never persist it, and do not tell users to put it in a shell startup
+  file. Tests that set it use an obvious placeholder and do not print it.
+- An old `esv_api_key` field is migrated into the keyring and deleted from
+  the file. If the keyring refuses it, the field is still deleted.
 
 ## Build, test, and run
 
@@ -73,8 +84,8 @@ go test ./...
 - `internal/esv`: Crossway's passage API. Verse cache and rate-limit
   journal live under `~/.cache/omasword` and do not contain the key.
 - `internal/settings`: `~/.config/omasword/config.json` (translation,
-  book, chapter, optional ESV key), written atomically. Migrates a
-  sword-tui config on first run.
+  book, chapter, optional `esv_api_key_cmd`), written atomically. The
+  API key is not in this file. Migrates a sword-tui config on first run.
 - `internal/ui`: the Bubble Tea model. The reading pane is pre-rendered
   into `m.content`; color or width changes call `rerenderContent`. Keys
   reach a text input only when `typingInInput` is true. Book IDs are

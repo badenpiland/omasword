@@ -4,6 +4,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -60,11 +61,13 @@ func RunWith(stdout, stderr io.Writer, args []string) int {
 		fmt.Fprint(stdout, helpText)
 		return ExitOK
 	}
+	if opt.notice != "" {
+		fmt.Fprintln(stderr, opt.notice)
+	}
 	bolls := api.NewClient()
-	key := esv.EffectiveKey(opt.configKey)
-	esvClient, err := esv.New(key, esv.DefaultCacheDir())
+	esvClient, err := esv.New(opt.key, esv.DefaultCacheDir())
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, redactErr(err, opt.key))
 		return ExitFetch
 	}
 	return execute(stdout, stderr, opt, bolls, esvClient)
@@ -76,7 +79,9 @@ type options struct {
 	passage     string
 	search      string
 	translation string
-	configKey   string
+	keyCmd      string
+	key         string // this process only; never printed or written
+	notice      string
 	explicit    bool // --translation was set
 }
 
@@ -110,9 +115,11 @@ func parseArgs(args []string) (options, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return options{}, err
 	}
-	opt.configKey = cfg.ESVAPIKey
+	opt.keyCmd = cfg.ESVAPIKeyCmd
+	opt.notice = cfg.KeyNotice
+	opt.key = esv.Resolve(cfg.ESVAPIKeyCmd)
 	if !opt.explicit {
-		opt.translation = resolveDefault(cfg.SelectedTranslation, esv.EffectiveKey(cfg.ESVAPIKey))
+		opt.translation = resolveDefault(cfg.SelectedTranslation, opt.key)
 	}
 	return opt, nil
 }
@@ -157,7 +164,7 @@ func checkTranslation(name string, esvClient esvAPI) error {
 	}
 	if name == esv.ID {
 		if esvClient == nil || !esvClient.HasKey() {
-			return fmt.Errorf("ESV needs your API key from https://api.esv.org/ (set OMASWORD_ESV_API_KEY or esv_api_key in config.json)")
+			return fmt.Errorf("ESV needs your API key from https://api.esv.org/. Store it in the system keyring (t, then a in the reader), set esv_api_key_cmd, or set OMASWORD_ESV_API_KEY for this command only")
 		}
 		return nil
 	}
@@ -244,7 +251,7 @@ func runPassage(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient
 		}
 		page, err := esvClient.Chapter(wanted.book, wanted.chapter, start)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintln(stderr, redactErr(err, opt.key))
 			return ExitFetch
 		}
 		notice = page.Notice
@@ -258,7 +265,7 @@ func runPassage(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient
 	} else {
 		got, err := bolls.GetChapter(opt.translation, wanted.book, wanted.chapter)
 		if err != nil {
-			fmt.Fprintln(stderr, err)
+			fmt.Fprintln(stderr, redactErr(err, opt.key))
 			return ExitFetch
 		}
 		verses = filterVerses(got, wanted)
@@ -312,7 +319,7 @@ func runSearch(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient 
 		resp, err = bolls.SearchVerses(opt.translation, opt.search)
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, redactErr(err, opt.key))
 		return ExitFetch
 	}
 	if resp == nil {
@@ -444,6 +451,13 @@ func plainText(s string) string {
 	return strings.Join(strings.Fields(api.SanitizeText(s)), " ")
 }
 
+func redactErr(err error, key string) error {
+	if err == nil || key == "" || !strings.Contains(err.Error(), key) {
+		return err
+	}
+	return errors.New(strings.ReplaceAll(err.Error(), key, "[redacted]"))
+}
+
 func writeJSON(stdout, stderr io.Writer, v any) int {
 	enc := json.NewEncoder(stdout)
 	enc.SetEscapeHTML(false)
@@ -461,10 +475,12 @@ With no arguments, omasword opens the reader.
 
 Non-interactive mode prints a passage or a search and exits. Public-domain
 translations (BSB by default) come from bolls.life. The ESV is online-only
-and needs your own key from https://api.esv.org/ (OMASWORD_ESV_API_KEY or
-esv_api_key in ~/.config/omasword/config.json). ESV output stays within
-500 verses or half a book, whichever is less, and includes Crossway's
-copyright notice and https://www.esv.org/.
+and needs your own key from https://api.esv.org/. The key is stored in the
+system keyring, not in a file. esv_api_key_cmd in config.json may name a
+command that prints it (for example "pass show esv"); that output is not
+saved. OMASWORD_ESV_API_KEY is for one command only and is never written.
+ESV output stays within 500 verses or half a book, whichever is less, and
+includes Crossway's copyright notice and https://www.esv.org/.
 
 Usage:
   omasword --passage "John 3:16" [--translation BSB] [--json]
