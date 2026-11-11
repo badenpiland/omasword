@@ -83,3 +83,23 @@ func TestBuiltinChapterStillReadsTheCache(t *testing.T) {
 		t.Fatalf("verses = %+v calls %d", verses, cache.calls)
 	}
 }
+
+func TestOnlyTheSixtySixBooks(t *testing.T) {
+	books := canonBooks([]Book{{BookID: 1, Name: "Genesis"}, {BookID: 66, Name: "Revelation"}, {BookID: 71, Name: "Extra"}})
+	if len(books) != 2 || books[1].BookID != 66 {
+		t.Fatalf("books = %+v", books)
+	}
+	resp := &SearchResponse{Total: 3, Results: []Verse{{Book: 43}, {Book: 71}, {Book: 1}}}
+	canonHits(resp)
+	if len(resp.Results) != 2 || resp.Total != 2 || resp.Results[0].Book != 43 || resp.Results[1].Book != 1 {
+		t.Fatalf("search = %+v", resp)
+	}
+	// Both fail before any request is made.
+	c := NewClient()
+	if _, err := c.GetChapter("KJV", 71, 1); err == nil {
+		t.Fatal("chapter of book 71 was requested")
+	}
+	if _, err := c.GetParallelVerses(ParallelVerseRequest{Translations: []string{"KJV"}, Book: 67, Chapter: 1}); err == nil {
+		t.Fatal("parallel verses of book 67 were requested")
+	}
+}

@@ -26,7 +26,7 @@ func TestPresentTranslationsDropsCopyrighted(t *testing.T) {
 		{ShortName: "ESV", FullName: "English Standard Version"},
 		{ShortName: "NLT", FullName: "New Living Translation"},
 		{ShortName: "BSB", FullName: "The Holy Bible, Berean Standard Bible"},
-		{ShortName: "KJV", FullName: "King James Version 1769 with Apocrypha"},
+		{ShortName: "KJV", FullName: "King James Version 1769"},
 		{ShortName: "CSB17", FullName: "Christian Standard Bible"},
 		{ShortName: "WEB", FullName: "World English Bible"},
 	}
