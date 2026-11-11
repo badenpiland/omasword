@@ -1,56 +1,99 @@
 package esv
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
-func TestParseHTMLVersesAndCopyright(t *testing.T) {
-	const fragment = `<h2>Obadiah 1</h2>
-<p><b class="verse-num" id="v31001001-1">1&nbsp;</b>The vision of Obadiah.</p>
-<p><b class="verse-num" id="v31001002-1">2&nbsp;</b>Behold, I will make you small among the nations; you shall be utterly despised.</p>
-<p>Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.</p>`
-
-	verses, notice, err := ParseHTML(fragment)
+func TestParseJohn3SplitsMidParagraphVerses(t *testing.T) {
+	text := readFixture(t, "testdata/john3.txt")
+	verses, _, err := ParsePassage(text)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(verses) != 2 || verses[0].Verse != 1 || verses[0].Text != "The vision of Obadiah." {
-		t.Fatalf("verses = %+v", verses)
+	byNum := map[int]string{}
+	for _, v := range verses {
+		byNum[v.Verse] = v.Text
 	}
-	if verses[1].Text != "Behold, I will make you small among the nations; you shall be utterly despised." {
-		t.Fatalf("verse 2 = %q", verses[1].Text)
+	if byNum[16] == "" {
+		t.Fatal("John 3:16 was empty")
 	}
-	if notice == "" || notice == "ESV" {
-		t.Fatalf("notice = %q", notice)
+	if contains(byNum[16], "did not send") || contains(byNum[16], "[17]") {
+		t.Fatalf("verse 16 contains the next verse: %q", byNum[16])
 	}
-	if !contains(notice, "Crossway") {
-		t.Fatalf("notice = %q", notice)
+	if contains(byNum[5], "That which is born") || contains(byNum[5], "Do not marvel") || contains(byNum[5], "The wind blows") {
+		t.Fatalf("verse 5 swallowed the rest of the paragraph: %q", byNum[5])
+	}
+	if !contains(byNum[6], "That which is born") {
+		t.Fatalf("verse 6 = %q", byNum[6])
+	}
+	if !contains(byNum[7], "Do not marvel") || !contains(byNum[8], "The wind blows") {
+		t.Fatalf("verses 7 and 8 = %q / %q", byNum[7], byNum[8])
+	}
+	for _, v := range verses {
+		if contains(v.Text, "permission site") || contains(v.Text, "ESV") {
+			t.Fatalf("verse %d kept the copyright footer: %q", v.Verse, v.Text)
+		}
 	}
 }
 
-func TestParseHTMLUnescapesAndDropsTags(t *testing.T) {
-	const fragment = `<p><b class="verse-num">16&nbsp;</b>For God so loved the world, that he gave his only Son, that whoever believes in him should not perish but have eternal life. <span class="footnote">&ldquo;only&rdquo;</span></p>`
-	verses, _, err := ParseHTML(fragment)
+func TestParseObadiahSplitsAll21VersesAndDropsFooter(t *testing.T) {
+	text := readFixture(t, "testdata/obadiah1.txt")
+	verses, _, err := ParsePassage(text)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(verses) != 1 || verses[0].Verse != 16 {
-		t.Fatalf("verses = %+v", verses)
+	if len(verses) != 21 {
+		t.Fatalf("got %d verses, want 21", len(verses))
 	}
-	if contains(verses[0].Text, "<") || contains(verses[0].Text, "ldquo") {
-		t.Fatalf("markup survived: %q", verses[0].Text)
+	if verses[0].Verse != 1 || verses[0].Text != "Obadiah fixture verse 1." {
+		t.Fatalf("verse 1 = %+v", verses[0])
 	}
-	if !contains(verses[0].Text, "For God so loved") || !contains(verses[0].Text, "“only”") && !contains(verses[0].Text, "only") {
-		t.Fatalf("text = %q", verses[0].Text)
+	if contains(verses[0].Text, "verse 2") {
+		t.Fatalf("verse 1 swallowed the chapter: %q", verses[0].Text)
+	}
+	last := verses[len(verses)-1]
+	if last.Verse != 21 || last.Text != "Obadiah fixture verse 21." {
+		t.Fatalf("verse 21 = %+v", last)
+	}
+	for _, v := range verses {
+		if contains(v.Text, "permission site") || contains(v.Text, "ESV") {
+			t.Fatalf("verse %d kept the copyright footer: %q", v.Verse, v.Text)
+		}
 	}
 }
 
-func TestParseHTMLRejectsABlobWithoutVerseNumbers(t *testing.T) {
-	if _, _, err := ParseHTML("<p>Jesus wept.</p>"); err == nil {
-		t.Fatal("expected an error when no verse numbers are marked")
+func TestParsePassageRejectsABlobWithoutMarkers(t *testing.T) {
+	if _, _, err := ParsePassage("Jesus wept."); err == nil {
+		t.Fatal("expected an error when no [N] markers are present")
 	}
+}
+
+func TestParsePassageKeepsScriptureQuotationsAsNoticeOnly(t *testing.T) {
+	const text = "[35] Jesus wept.\nScripture quotations are from the ESV® Bible, © 2001 by Crossway."
+	verses, notice, err := ParsePassage(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(verses) != 1 || verses[0].Text != "Jesus wept." {
+		t.Fatalf("verses = %+v", verses)
+	}
+	if !contains(notice, "Scripture quotations") || contains(verses[0].Text, "Scripture") {
+		t.Fatalf("notice = %q verse = %q", notice, verses[0].Text)
+	}
+}
+
+func readFixture(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
+	return len(sub) == 0 || (len(s) >= len(sub) && indexOf(s, sub) >= 0)
 }
 
 func indexOf(s, sub string) int {

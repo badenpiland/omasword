@@ -60,7 +60,11 @@ func DefaultCacheDir() string {
 	return filepath.Join(base, "omasword")
 }
 
-// New builds a client. cacheDir holds esv-verses.json and esv-usage.json;
+// verseCacheFile is versioned because a bad parse of the HTML endpoint
+// was stored under esv-verses.json. That file is left unread.
+const verseCacheFile = "esv-verses-v2.json"
+
+// New builds a client. cacheDir holds the verse cache and esv-usage.json;
 // an empty cacheDir keeps both in memory. key may be empty, in which case
 // Chapter and Search return ErrNoKey.
 func New(key, cacheDir string) (*Client, error) {
@@ -80,7 +84,7 @@ func New(key, cacheDir string) (*Client, error) {
 		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 			return nil, err
 		}
-		verses, err = OpenVerseCache(filepath.Join(cacheDir, "esv-verses.json"))
+		verses, err = OpenVerseCache(filepath.Join(cacheDir, verseCacheFile))
 		if err != nil {
 			return nil, err
 		}
@@ -259,22 +263,21 @@ func (c *Client) Search(query string) (*api.SearchResponse, error) {
 func (c *Client) fetchChapter(name string, chapter int) ([]api.Verse, string, error) {
 	q := url.Values{}
 	q.Set("q", fmt.Sprintf("%s %d", name, chapter))
-	// Ask for verse numbers and the copyright notice, and turn off the
-	// furniture (headings, footnotes, audio) so the verse text stays
-	// the words Crossway sent.
+	// The text endpoint puts a [N] marker on every verse, including ones
+	// that share a paragraph. The HTML endpoint only tags the first verse
+	// of a paragraph, which glued the rest of the paragraph into that verse.
+	q.Set("include-verse-numbers", "true")
+	q.Set("include-first-verse-numbers", "true")
 	for _, off := range []string{
-		"include-headings", "include-footnotes", "include-footnote-body",
+		"include-footnotes", "include-footnote-body",
 		"include-passage-references", "include-short-copyright",
-		"include-audio-link", "include-chapter-numbers", "include-subheadings",
-		"indent-poetry",
+		"include-copyright", "include-headings",
+		"include-heading-horizontal-lines", "include-passage-horizontal-lines",
 	} {
 		q.Set(off, "false")
 	}
-	q.Set("include-verse-numbers", "true")
-	q.Set("include-first-verse-numbers", "true")
-	q.Set("include-copyright", "true")
 	q.Set("indent-paragraphs", "0")
-	body, err := c.get("/v3/passage/html/", q)
+	body, err := c.get("/v3/passage/text/", q)
 	if err != nil {
 		return nil, "", err
 	}
@@ -284,7 +287,7 @@ func (c *Client) fetchChapter(name string, chapter int) ([]api.Verse, string, er
 	if err := json.Unmarshal(body, &raw); err != nil || len(raw.Passages) == 0 {
 		return nil, "", errors.New("ESV passage response was empty")
 	}
-	return ParseHTML(raw.Passages[0])
+	return ParsePassage(raw.Passages[0])
 }
 
 func (c *Client) get(path string, query url.Values) ([]byte, error) {

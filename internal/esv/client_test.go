@@ -9,18 +9,17 @@ import (
 	"time"
 )
 
-const sampleHTML = `<p><b class="verse-num" id="v31001001-1">1&nbsp;</b>The vision of Obadiah.</p>` +
-	`<p><b class="verse-num">2&nbsp;</b>Behold, I will make you small.</p>` +
-	`<p><b class="verse-num">3&nbsp;</b>The pride of your heart has deceived you.</p>` +
-	`<p><b class="verse-num">4&nbsp;</b>Though you soar aloft like the eagle.</p>` +
-	`<p><b class="verse-num">5&nbsp;</b>If thieves came to you.</p>` +
-	`<p><b class="verse-num">6&nbsp;</b>How you have been pillaged.</p>` +
-	`<p><b class="verse-num">7&nbsp;</b>All your allies have driven you.</p>` +
-	`<p><b class="verse-num">8&nbsp;</b>Will I not on that day.</p>` +
-	`<p><b class="verse-num">9&nbsp;</b>And your mighty men shall be dismayed.</p>` +
-	`<p><b class="verse-num">10&nbsp;</b>Because of the violence done to your brother.</p>` +
-	`<p><b class="verse-num">11&nbsp;</b>On the day that you stood aloof.</p>` +
-	`<p>Scripture quotations are from the ESV® Bible, © 2001 by Crossway. Used by permission. All rights reserved.</p>`
+const sampleText = "" +
+	"[1] The vision of Obadiah. [2] Behold, I will make you small.\n" +
+	"[3] The pride of your heart has deceived you.\n" +
+	"[4] Though you soar aloft like the eagle.\n" +
+	"[5] If thieves came to you.\n" +
+	"[6] How you have been pillaged.\n" +
+	"[7] All your allies have driven you.\n" +
+	"[8] Will I not on that day.\n" +
+	"[9] And your mighty men shall be dismayed.\n" +
+	"[10] Because of the violence done to your brother.\n" +
+	"[11] On the day that you stood aloof. ESV ® Bible. Please visit our permission site .\n"
 
 func TestChapterClipsCachesAndHidesTheKey(t *testing.T) {
 	const key = "test-key-not-real"
@@ -33,10 +32,14 @@ func TestChapterClipsCachesAndHidesTheKey(t *testing.T) {
 		if strings.Contains(r.URL.String(), key) {
 			t.Errorf("key leaked into the URL: %s", r.URL)
 		}
-		if !strings.Contains(r.URL.Path, "/v3/passage/html/") {
+		if !strings.Contains(r.URL.Path, "/v3/passage/text/") {
 			t.Errorf("path = %s", r.URL.Path)
 		}
-		fmt.Fprintf(w, `{"passages":[%q]}`, sampleHTML)
+		q := r.URL.Query()
+		if q.Get("include-verse-numbers") != "true" || q.Get("include-copyright") != "false" || q.Get("include-footnotes") != "false" || q.Get("include-headings") != "false" {
+			t.Errorf("query = %s", r.URL.RawQuery)
+		}
+		fmt.Fprintf(w, `{"passages":[%q]}`, sampleText)
 	}))
 	defer srv.Close()
 
@@ -53,6 +56,9 @@ func TestChapterClipsCachesAndHidesTheKey(t *testing.T) {
 	}
 	if len(page.Verses) != MaxVerses(31) {
 		t.Fatalf("showed %d verses, cap is %d", len(page.Verses), MaxVerses(31))
+	}
+	if page.Verses[0].Text != "The vision of Obadiah." || strings.Contains(page.Verses[0].Text, "Behold") || strings.Contains(page.Verses[0].Text, "permission") {
+		t.Fatalf("verse 1 = %q", page.Verses[0].Text)
 	}
 	if !page.MoreAfter || page.MoreBefore {
 		t.Fatalf("page flags before=%v after=%v", page.MoreBefore, page.MoreAfter)
