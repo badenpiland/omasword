@@ -75,9 +75,8 @@ It then shows up in the app launcher (`Super + Space`) and opens in its own
 tiled terminal window. To remove the launcher entry, run
 `omarchy-tui-remove omasword`.
 
-Packaging recipes (`PKGBUILD`, `omasword.spec`, `Formula/omasword.rb`) are
-carried over from sword-tui but no omasword packages, tap or COPR repo have
-been published yet.
+Tagged releases also attach prebuilt Linux binaries (amd64 and arm64) on the
+[Releases page](https://github.com/badenpiland/omasword/releases).
 
 ### Coming from sword-tui
 

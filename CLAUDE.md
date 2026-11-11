@@ -1,85 +1,46 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 
-## Project Overview
+## Project
 
-omasword is a terminal-based Bible application built with Go using the Bubbletea TUI framework. It connects to the bolls.life API for Bible data.
+omasword is a terminal Bible reader for Omarchy, written in Go on the charm
+v2 stack (Bubble Tea, Bubbles, Lip Gloss). Bible data comes from the
+bolls.life API, with optional offline translation downloads. It is a fork of
+[kmf/sword-tui](https://github.com/kmf/sword-tui) (GPL-2.0-or-later).
 
-## Build & Run
+## Build and test
 
 ```bash
-# Build the application
-go build -o omasword cmd/omasword/main.go
-
-# Run the application
-./omasword
+go build -o omasword ./cmd/omasword
+go vet ./...
+go test ./...
 ```
 
-## Architecture
+## Layout
 
-The application follows a clean three-layer architecture:
+- `cmd/omasword/main.go`: flags (`--version`), cache setup, starts the program.
+- `internal/api`: bolls.life HTTP client. Everything it returns is untrusted:
+  text goes through `SanitizeText` (strips terminal control characters) and
+  translation names through `ValidTranslationName` before use in URLs or paths.
+- `internal/cache`: offline translations in `~/.cache/omasword/translations`;
+  downloads are size-capped and written via temp file + rename.
+- `internal/settings`: `~/.config/omasword/config.json` (translation, book,
+  chapter), written atomically on every chapter load and on quit. Migrates
+  from the old `sword-tui` directories on first run.
+- `internal/theme`: colors come only from the active Omarchy theme
+  (`colors.toml` under `$XDG_STATE_HOME/omarchy/current/theme`, or the older
+  `~/.config/omarchy/current/theme`), polled once a second; Tokyo Night is the
+  fallback without Omarchy.
+- `internal/ui/model.go`: the Bubble Tea model (Update/View, panes, overlays).
+- `assets/`: launcher icon (`make-icon.py` regenerates it) and social preview.
 
-### 1. Entry Point (`cmd/omasword/main.go`)
-- Initializes the Bubbletea program with alt screen and mouse support
-- Creates and runs the UI model
+## Conventions
 
-### 2. API Layer (`internal/api/client.go`)
-- Handles all HTTP communication with bolls.life API
-- Key structs: `Translation`, `Book`, `Verse`, `LanguageGroup`, `ParallelVerseRequest`
-- Important: `GetTranslations()` filters for English translations only
-- Book IDs range from 1-66 (1-39 Old Testament, 40-66 New Testament)
-
-### 3. UI Layer (`internal/ui/model.go`)
-- Implements the Bubbletea Model-View-Update pattern
-- State management through `viewMode` enum and boolean flags (`showSidebar`, `showTranslationList`)
-- Uses bubbles components: `viewport` for scrollable content, `textinput` for search
-- Lipgloss for styling
-
-## Key UI Interactions
-
-### Sidebar System
-The app has two independent sidebars:
-- **Book sidebar** (`[` key): Shows Old Testament and New Testament books
-- **Translation sidebar** (`]` key): Shows English translations with virtual scrolling
-
-**Critical implementation detail**: When opening sidebars, must correctly map current state to array indices:
-- Book sidebar: Find index by searching `m.books` array for matching `BookID` (not `BookID - 1`)
-- Translation sidebar: Find index by searching `m.translations` for matching `ShortName`
-
-### Navigation
-- `n`/`p`: Next/previous chapter
-- `/`: Search for verse reference (format: "book chapter:verse" or "1 1:1")
-- `c`: Comparison view (parallel verses across multiple translations)
-- `↑`/`↓` or `j`/`k`: Navigate in sidebars
-- `enter`: Select item in sidebar or execute search
-- `esc`: Close sidebars or cancel search
-- Mouse clicks work in sidebars
-
-### Virtual Scrolling
-Translation sidebar implements virtual scrolling to handle 40+ items:
-- Calculates visible window around selected item
-- Shows "... (N more above/below)" indicators
-- Centers selected translation in view
-
-## Data Flow
-
-1. **Initialization**: `Init()` loads translations, books, and initial chapter in parallel
-2. **Messages**: Async operations return typed messages (`translationsLoadedMsg`, `booksLoadedMsg`, `chapterLoadedMsg`, etc.)
-3. **Update**: Model processes messages and returns commands for side effects
-4. **View**: Renders based on current mode and flags
-
-## Common Issues
-
-- **JSON unmarshaling**: Ensure struct field types match API response (e.g., `BookID` is `int`, `Chapters` is `int`)
-- **Array indexing**: BookID is not an array index; always search the books array
-- **Sidebar conditions**: Sidebars toggle independently; don't block one with the other's state
-
-## Git Conventions
-
-Use conventional commits:
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `refactor:` - Code restructuring
-
-All commits include Claude Code attribution footer.
+- Book IDs are 1–66 and are not array indices; look books up by `BookID`.
+- The reading pane is pre-rendered into `m.content`; anything that changes
+  its colors or width must call `rerenderContent()` (theme changes go through
+  `setTheme`).
+- Keys only reach text inputs when `typingInInput()` is true; keep global
+  shortcuts from firing while typing.
+- Conventional commits; stage files explicitly (never `git add -A`).

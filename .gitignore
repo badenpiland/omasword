@@ -20,3 +20,6 @@ go.work
 
 # Build number tracking
 .build_number
+
+# Local Claude Code settings
+.claude/settings.local.json
