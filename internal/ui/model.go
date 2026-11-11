@@ -123,11 +123,12 @@ type Model struct {
 	// every ~120ms while a download is running.
 	downloadProgress float64
 	progressBar      progress.Model
-	// ESV is online-only, through the user's own Crossway key.
-	// esvConfigKey is what gets written to config.json. The environment
-	// variable is applied on the client and is not copied here.
+	// ESV is online-only. The key lives in the OS keyring (or a command,
+	// or a one-shot environment variable). It is not a field here and it
+	// is not written to config. esvKeyCmd is the command string only.
 	esvClient        *esv.Client
-	esvConfigKey     string
+	esvKeyCmd        string
+	startupNote      string
 	esvPageBook      int
 	esvPageChapter   int
 	esvPageStart     int
@@ -216,8 +217,10 @@ func NewModel() Model {
 	// copyrighted translation, or ESV with no key. Open the
 	// public-domain default instead of requesting a text we will not
 	// serve, and rewrite the config so the next launch does not keep
-	// pointing at it. ESV is kept when a key is already configured.
-	configKey := ""
+	// pointing at it. ESV is kept when a key resolves from the keyring,
+	// esv_api_key_cmd, or a one-shot OMASWORD_ESV_API_KEY.
+	keyCmd := ""
+	startupNote := ""
 	fellBack := false
 
 	// Colors always follow the active Omarchy desktop theme.
@@ -225,11 +228,12 @@ func NewModel() Model {
 	currentTheme := theme.Current()
 
 	if err == nil {
-		configKey = cfg.ESVAPIKey
+		keyCmd = cfg.ESVAPIKeyCmd
+		startupNote = cfg.KeyNotice
 		switch {
 		case translations.IsBuiltin(cfg.SelectedTranslation):
 			selectedTranslation = cfg.SelectedTranslation
-		case cfg.SelectedTranslation == esv.ID && esv.EffectiveKey(configKey) != "":
+		case cfg.SelectedTranslation == esv.ID && esv.Resolve(keyCmd) != "":
 			selectedTranslation = esv.ID
 		case cfg.SelectedTranslation != "":
 			fellBack = true
@@ -258,9 +262,10 @@ func NewModel() Model {
 		progressBar:            progress.New(progress.WithDefaultBlend(), progress.WithoutPercentage()),
 		comparisonPickerColumn: -1,
 		esvKeyInput:            esvKey,
-		esvConfigKey:           configKey,
+		esvKeyCmd:              keyCmd,
+		startupNote:            startupNote,
 	}
-	m.esvClient, _ = esv.New(esv.EffectiveKey(configKey), esv.DefaultCacheDir())
+	m.esvClient, _ = esv.New(esv.Resolve(keyCmd), esv.DefaultCacheDir())
 	if fellBack {
 		_ = m.saveSettings()
 	}

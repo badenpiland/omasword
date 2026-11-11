@@ -186,7 +186,11 @@ func (m Model) renderESVKey() string {
 	body.WriteString(titleStyle.Render("ESV API key") + "\n\n")
 	body.WriteString(bodyStyle.Render("The ESV is online-only, with your own non-commercial key from Crossway. Create one at https://api.esv.org/ and paste it here.") + "\n\n")
 	body.WriteString(ti.View() + "\n\n")
-	body.WriteString(hintStyle.Render("Enter saves the key in config.json (mode 0600). An empty line removes it. OMASWORD_ESV_API_KEY overrides the file and is not written down."))
+	body.WriteString(hintStyle.Render("Enter stores the key in the system keyring (gnome-keyring or KeePassXC). An empty line deletes it. A password manager can print the key via esv_api_key_cmd in config.json. OMASWORD_ESV_API_KEY is for one command only and is never saved."))
+	if m.err != nil {
+		errStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Error).Background(bg)
+		body.WriteString("\n\n" + errStyle.Render(m.err.Error()))
+	}
 	return box.Render(body.String())
 }
 

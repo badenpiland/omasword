@@ -4,16 +4,24 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"omasword/internal/esv"
 )
 
 type Settings struct {
 	SelectedTranslation string `json:"selected_translation"`
 	CurrentBook         int    `json:"current_book"`
 	CurrentChapter      int    `json:"current_chapter"`
-	// ESVAPIKey is the user's own Crossway key from api.esv.org. It is
-	// omitted when empty. The config file is mode 0600 while this is set.
-	// OMASWORD_ESV_API_KEY overrides it and is not written here.
-	ESVAPIKey string `json:"esv_api_key,omitempty"`
+	// ESVAPIKeyCmd is a command whose first line of stdout is the ESV API
+	// key (for example "pass show esv"). The command is stored here. Its
+	// output is not.
+	ESVAPIKeyCmd string `json:"esv_api_key_cmd,omitempty"`
+	// LegacyESVAPIKey is read only so an older config can be migrated into
+	// the keyring. Save always clears it. The key itself is never written.
+	LegacyESVAPIKey string `json:"esv_api_key,omitempty"`
+	// KeyNotice is set when a legacy key was scrubbed from this file. It
+	// is not serialized.
+	KeyNotice string `json:"-"`
 }
 
 // legacyDirName is the config directory used before the rename from
@@ -57,8 +65,27 @@ func Load() (Settings, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return Settings{}, err
 	}
-
+	if err := s.scrubLegacyKey(); err != nil {
+		return s, err
+	}
 	return s, nil
+}
+
+// scrubLegacyKey moves a plaintext esv_api_key into the OS keyring and
+// rewrites the file without it. The rewrite happens even when the keyring
+// refuses the secret, so the key does not stay in the file.
+func (s *Settings) scrubLegacyKey() error {
+	if s.LegacyESVAPIKey == "" {
+		return nil
+	}
+	secret := s.LegacyESVAPIKey
+	s.LegacyESVAPIKey = ""
+	if err := esv.SaveKey(secret); err != nil {
+		s.KeyNotice = esv.MigrationFailedNotice
+	} else {
+		s.KeyNotice = esv.MigrationOKNotice
+	}
+	return Save(*s)
 }
 
 func Save(s Settings) error {
@@ -67,17 +94,13 @@ func Save(s Settings) error {
 		return err
 	}
 
+	// A key must never be written, even if a caller left the legacy field set.
+	s.LegacyESVAPIKey = ""
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-
-	mode := os.FileMode(0o644)
-	if s.ESVAPIKey != "" {
-		// The key lives in this file, so the file itself is owner-only.
-		mode = 0o600
-	}
-	return writeFileAtomic(path, data, mode)
+	return writeFileAtomic(path, data, 0o644)
 }
 
 // writeFileAtomic writes data to a temp file beside path and renames it into

@@ -142,6 +142,9 @@ func (m Model) renderStatusBar() string {
 	rightStyle := lipgloss.NewStyle().Background(bg)
 
 	hints := m.statusHints(keyStyle, hintStyle)
+	if m.startupNote != "" {
+		hints = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render(m.startupNote)
+	}
 
 	// Right side: loading indicator or error condensed
 	var right string

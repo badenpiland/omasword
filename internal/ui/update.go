@@ -462,7 +462,7 @@ func (m Model) saveSettings() error {
 		SelectedTranslation: m.selectedTranslation,
 		CurrentBook:         m.currentBook,
 		CurrentChapter:      m.currentChapter,
-		ESVAPIKey:           m.esvConfigKey,
+		ESVAPIKeyCmd:        m.esvKeyCmd,
 	})
 }
 

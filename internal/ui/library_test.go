@@ -12,7 +12,13 @@ import (
 	"omasword/internal/translations"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/zalando/go-keyring"
 )
+
+func TestMain(m *testing.M) {
+	keyring.MockInit()
+	os.Exit(m.Run())
+}
 
 func TestPresentTranslationsDropsCopyrighted(t *testing.T) {
 	in := []api.Translation{
@@ -127,10 +133,14 @@ func TestFlavorLineClickSelectsThatTranslation(t *testing.T) {
 }
 
 func TestSavedESVStaysWhenAKeyIsConfigured(t *testing.T) {
+	keyring.MockInit()
 	t.Setenv("OMASWORD_ESV_API_KEY", "")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	if err := settings.Save(settings.Settings{SelectedTranslation: "ESV", CurrentBook: 43, CurrentChapter: 16, ESVAPIKey: "test-key-not-real"}); err != nil {
+	if err := esv.SaveKey("test-key-not-real"); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.Save(settings.Settings{SelectedTranslation: "ESV", CurrentBook: 43, CurrentChapter: 16}); err != nil {
 		t.Fatal(err)
 	}
 	m := NewModel()
@@ -151,8 +161,8 @@ func TestEnvESVKeyIsNotWrittenToConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := NewModel()
-	if m.selectedTranslation != "ESV" || m.esvConfigKey != "" {
-		t.Fatalf("translation %s stored key %q", m.selectedTranslation, m.esvConfigKey)
+	if m.selectedTranslation != "ESV" || !m.esvClient.HasKey() {
+		t.Fatalf("translation %s hasKey %v", m.selectedTranslation, m.esvClient != nil && m.esvClient.HasKey())
 	}
 	m.Update(chapterLoadedMsg{verses: []api.Verse{{Verse: 16, Text: "For God so loved"}}})
 	data, err := os.ReadFile(filepath.Join(dir, "omasword", "config.json"))
@@ -165,6 +175,7 @@ func TestEnvESVKeyIsNotWrittenToConfig(t *testing.T) {
 }
 
 func TestESVWizardStoresAndRemovesTheKey(t *testing.T) {
+	keyring.MockInit()
 	t.Setenv("OMASWORD_ESV_API_KEY", "")
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -198,8 +209,18 @@ func TestESVWizardStoresAndRemovesTheKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("config mode = %o, want 600", info.Mode().Perm())
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("config mode = %o, want 644 (the key is not in this file)", info.Mode().Perm())
+	}
+	saved, err := os.ReadFile(filepath.Join(dir, "omasword", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(saved), "test-key-not-real") || strings.Contains(string(saved), "esv_api_key\"") {
+		t.Fatalf("config contains the key: %s", saved)
+	}
+	if esv.Resolve("") != "test-key-not-real" {
+		t.Fatal("wizard did not store the key in the keyring")
 	}
 
 	m.mode = modeESVKey
@@ -221,8 +242,71 @@ func TestESVWizardStoresAndRemovesTheKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ESVAPIKey != "" {
-		t.Fatalf("removed key is still stored: %q", got.ESVAPIKey)
+	if got.LegacyESVAPIKey != "" || esv.Resolve("") != "" {
+		t.Fatal("removed key is still stored")
+	}
+}
+
+func TestWizardRefusesToSaveWithoutAKeyring(t *testing.T) {
+	keyring.MockInitWithError(os.ErrPermission)
+	t.Cleanup(func() { keyring.MockInit() })
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	m := NewModel()
+	m.mode = modeESVKey
+	m.esvKeyThenSelect = true
+	m.esvKeyInput.SetValue("test-key-not-real")
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd != nil || m.mode != modeESVKey {
+		t.Fatalf("mode %d cmd %v; a missing keyring should keep the wizard open", m.mode, cmd != nil)
+	}
+	if m.err == nil || !strings.Contains(m.err.Error(), "keyring") {
+		t.Fatalf("err = %v", m.err)
+	}
+	if strings.Contains(m.err.Error(), "test-key-not-real") {
+		t.Fatal("the refusal includes the key")
+	}
+	if m.esvClient != nil && m.esvClient.HasKey() {
+		t.Fatal("the unsaved key was kept")
+	}
+	if entries, _ := os.ReadDir(filepath.Join(dir, "omasword")); len(entries) > 0 {
+		data, _ := os.ReadFile(filepath.Join(dir, "omasword", "config.json"))
+		if strings.Contains(string(data), "test-key-not-real") {
+			t.Fatalf("refused key was written to config: %s", data)
+		}
+	}
+}
+
+func TestLegacyConfigKeyIsMigratedOnStartup(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	cfgDir := filepath.Join(dir, "omasword")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := []byte(`{"selected_translation":"ESV","current_book":43,"current_chapter":16,"esv_api_key":"test-key-not-real"}`)
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel()
+	if m.selectedTranslation != esv.ID || !m.esvClient.HasKey() {
+		t.Fatalf("translation %s hasKey %v", m.selectedTranslation, m.esvClient != nil && m.esvClient.HasKey())
+	}
+	if m.startupNote != esv.MigrationOKNotice {
+		t.Fatalf("note = %q", m.startupNote)
+	}
+	data, err := os.ReadFile(filepath.Join(cfgDir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "test-key-not-real") || strings.Contains(string(data), "esv_api_key") {
+		t.Fatalf("migrated config still has the key: %s", data)
 	}
 }
 

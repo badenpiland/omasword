@@ -18,6 +18,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 	if m.mode == modePicker {
 		return m.handlePickerKey(msg)
 	}
+	// The migration note stays until the first key, then it's gone.
+	if m.startupNote != "" && !m.typingInInput() {
+		m.startupNote = ""
+	}
 	switch msg.String() {
 	case "ctrl+c", "q":
 		// "q" is a letter like any other while a text input has
@@ -398,6 +402,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.esvKeyThenSelect = false
 			m.esvKeyInput.SetValue("")
 			m.esvKeyInput.Focus()
+			m.err = nil
 			return m, nil, true
 		}
 	case ",":

@@ -149,6 +149,7 @@ func (m Model) chooseTranslation(name string) (Model, tea.Cmd) {
 		m.esvKeyThenSelect = true
 		m.esvKeyInput.SetValue("")
 		m.esvKeyInput.Focus()
+		m.err = nil
 		return m, nil
 	}
 	m.esvPageStart = 1
@@ -168,33 +169,54 @@ func (m Model) chooseTranslation(name string) (Model, tea.Cmd) {
 	)
 }
 
-// commitESVKey stores the wizard's input. An empty input removes the key
-// from config. The environment variable is never written into the file.
+// commitESVKey stores the wizard's input in the OS keyring, or deletes
+// that entry when the input is empty. The key is never written to config.
+// A missing keyring leaves the wizard open with ErrNoKeyring.
 func (m Model) commitESVKey() (Model, tea.Cmd) {
 	raw := strings.TrimSpace(m.esvKeyInput.Value())
-	m.esvConfigKey = raw
-	effective := esv.EffectiveKey(raw)
-	if m.esvClient == nil {
-		m.esvClient, _ = esv.New(effective, esv.DefaultCacheDir())
-	} else {
-		m.esvClient.SetKey(effective)
-	}
-	_ = m.saveSettings()
 	m.esvKeyInput.SetValue("")
+	var err error
+	if raw == "" {
+		err = esv.DeleteKey()
+	} else {
+		err = esv.SaveKey(raw)
+	}
+	if err != nil {
+		m.err = err
+		m.mode = modeESVKey
+		return m, nil
+	}
+	m.err = nil
+	m.refreshESVKey()
 	then := m.esvKeyThenSelect
 	m.esvKeyThenSelect = false
 	if then && m.esvClient != nil && m.esvClient.HasKey() {
-		return m.chooseTranslation(esv.ID)
+		m, cmd := m.chooseTranslation(esv.ID)
+		_ = m.saveSettings()
+		return m, cmd
 	}
 	if m.selectedTranslation == esv.ID && (m.esvClient == nil || !m.esvClient.HasKey()) {
 		m.selectedTranslation = translations.Default
 		m.esvPageStart = 1
 		m.mode = modeReader
 		m.loading = true
+		_ = m.saveSettings()
 		return m, tea.Batch(m.loadReadingBooks(), m.loadReadingChapter(m.currentBook, m.currentChapter))
 	}
 	m.mode = modeTranslationSelect
+	_ = m.saveSettings()
 	return m, nil
+}
+
+// refreshESVKey points the client at whatever Resolve returns now. The
+// value stays in the client for this process. It is not saved.
+func (m *Model) refreshESVKey() {
+	key := esv.Resolve(m.esvKeyCmd)
+	if m.esvClient == nil {
+		m.esvClient, _ = esv.New(key, esv.DefaultCacheDir())
+		return
+	}
+	m.esvClient.SetKey(key)
 }
 
 func (m Model) translationFlavor(name string) string {

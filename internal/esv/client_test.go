@@ -153,14 +153,6 @@ func TestNoKeyAndEnvOverride(t *testing.T) {
 	if _, err := c.Chapter(43, 3, 1); err != ErrNoKey {
 		t.Fatalf("err = %v", err)
 	}
-	t.Setenv("OMASWORD_ESV_API_KEY", "from-env")
-	if got := EffectiveKey("from-file"); got != "from-env" {
-		t.Fatalf("EffectiveKey = %q", got)
-	}
-	t.Setenv("OMASWORD_ESV_API_KEY", "")
-	if got := EffectiveKey("from-file"); got != "from-file" {
-		t.Fatalf("EffectiveKey = %q", got)
-	}
 }
 
 func TestSearchClipsAShortBook(t *testing.T) {

@@ -165,15 +165,6 @@ func (c *Client) snapshot() (key, base string) {
 	return c.key, c.baseURL
 }
 
-// EffectiveKey returns the environment variable when it is set, otherwise
-// the config value. The environment value is never written back to disk.
-func EffectiveKey(configKey string) string {
-	if v := strings.TrimSpace(os.Getenv("OMASWORD_ESV_API_KEY")); v != "" {
-		return v
-	}
-	return strings.TrimSpace(configKey)
-}
-
 // Chapter fetches one chapter and returns the page that starts at
 // startVerse, clipped to the per-page cap. A cached page is used when
 // it is present, so repeat visits do not call the API.
