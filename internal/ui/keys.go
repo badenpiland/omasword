@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"omasword/internal/api"
+	"omasword/internal/translations"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -354,11 +355,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				return m, loadChapter(m.client, m.selectedTranslation, m.currentBook, m.currentChapter), true
 			}
 		} else if m.mode == modeTranslationSelect {
-			// Simple translation selection (cycle through common ones)
-			translations := []string{"ESV", "NLT", "KJV", "ASV", "WEB", "YLT", "DARBY"}
-			for i, t := range translations {
+			// The list has not loaded yet. Cycle the public-domain
+			// catalog instead of a hardcoded set that included
+			// copyrighted translations.
+			cycle := translations.ShortNames()
+			for i, t := range cycle {
 				if t == m.selectedTranslation {
-					m.selectedTranslation = translations[(i+1)%len(translations)]
+					m.selectedTranslation = cycle[(i+1)%len(cycle)]
 					break
 				}
 			}
@@ -379,6 +382,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				}
 			}
 			return m, nil, true
+		}
+	case "X":
+		// Remove every downloaded translation that is no longer offered.
+		if m.mode == modeCacheManager && m.cache != nil {
+			leftovers := m.leftoverDownloads()
+			if len(leftovers) == 0 {
+				return m, nil, true
+			}
+			for _, name := range leftovers {
+				if err := m.cache.RemoveTranslation(name); err != nil {
+					m.err = err
+					break
+				}
+			}
+			return m, loadCachedList(m.cache), true
 		}
 	case "esc":
 		if m.mode == modeCacheManager {

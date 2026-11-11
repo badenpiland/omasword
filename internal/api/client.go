@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"omasword/internal/translations"
 )
 
 const baseURL = "https://bolls.life"
@@ -188,6 +190,19 @@ func checkTranslation(name string) error {
 	return nil
 }
 
+// requireBuiltin rejects anything outside the public-domain allowlist
+// before a URL is built or a cache file is opened. bolls.life also hosts
+// copyrighted translations; those must not be requested or served.
+func requireBuiltin(name string) error {
+	if err := checkTranslation(name); err != nil {
+		return err
+	}
+	if !translations.IsBuiltin(name) {
+		return fmt.Errorf("%s is not in the public-domain library", name)
+	}
+	return nil
+}
+
 func sanitizeVerses(verses []Verse) {
 	for i := range verses {
 		verses[i].Text = SanitizeText(verses[i].Text)
@@ -206,28 +221,37 @@ func (c *Client) GetTranslations() ([]Translation, error) {
 	if err := c.getJSON(baseURL+"/static/bolls/app/views/languages.json", &languageGroups); err != nil {
 		return nil, err
 	}
+	return englishBuiltins(languageGroups), nil
+}
 
-	// Filter for English translations only, dropping any whose short
-	// name isn't safe to use in a URL or cache file name.
-	var englishTranslations []Translation
-	for _, group := range languageGroups {
-		if group.Language == "English" {
-			for _, t := range group.Translations {
-				if !ValidTranslationName(t.ShortName) {
-					continue
-				}
-				t.FullName = SanitizeText(t.FullName)
-				englishTranslations = append(englishTranslations, t)
+// englishBuiltins keeps the public-domain English translations, in catalog
+// order. Copyrighted names are dropped even when the server lists them.
+func englishBuiltins(groups []LanguageGroup) []Translation {
+	byName := make(map[string]Translation)
+	for _, group := range groups {
+		if group.Language != "English" {
+			continue
+		}
+		for _, t := range group.Translations {
+			if !translations.IsBuiltin(t.ShortName) {
+				continue
 			}
-			break
+			t.FullName = SanitizeText(t.FullName)
+			byName[t.ShortName] = t
+		}
+		break
+	}
+	out := make([]Translation, 0, len(byName))
+	for _, name := range translations.ShortNames() {
+		if t, ok := byName[name]; ok {
+			out = append(out, t)
 		}
 	}
-
-	return englishTranslations, nil
+	return out
 }
 
 func (c *Client) GetBooks(translation string) ([]Book, error) {
-	if err := checkTranslation(translation); err != nil {
+	if err := requireBuiltin(translation); err != nil {
 		return nil, err
 	}
 	var books []Book
@@ -241,7 +265,7 @@ func (c *Client) GetBooks(translation string) ([]Book, error) {
 }
 
 func (c *Client) GetChapter(translation string, book, chapter int) ([]Verse, error) {
-	if err := checkTranslation(translation); err != nil {
+	if err := requireBuiltin(translation); err != nil {
 		return nil, err
 	}
 	// Try cache first if available. A cache file that can't be read
@@ -262,7 +286,7 @@ func (c *Client) GetChapter(translation string, book, chapter int) ([]Verse, err
 
 func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse, error) {
 	for _, t := range req.Translations {
-		if err := checkTranslation(t); err != nil {
+		if err := requireBuiltin(t); err != nil {
 			return nil, err
 		}
 	}
@@ -295,7 +319,7 @@ func (c *Client) GetParallelVerses(req ParallelVerseRequest) (map[string][]Verse
 }
 
 func (c *Client) SearchVerses(translation, query string) (*SearchResponse, error) {
-	if err := checkTranslation(translation); err != nil {
+	if err := requireBuiltin(translation); err != nil {
 		return nil, err
 	}
 	params := url.Values{}

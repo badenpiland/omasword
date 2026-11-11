@@ -565,6 +565,7 @@ func stripHTMLTags(s string) string {
 	// in <em>…</em> *inside* words (e.g. "lov<em>e</em>d"), so replacing
 	// tags with a space would split such words. Drop them outright and
 	// collapse any resulting double spaces at the end.
+	s = strongsRe.ReplaceAllString(s, "")
 	s = htmlTagRe.ReplaceAllString(s, "")
 
 	// Decode common HTML entities

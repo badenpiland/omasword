@@ -127,12 +127,17 @@ func (m *Model) overlayClick(row int) tea.Cmd {
 		if m.translations == nil {
 			return nil
 		}
-		start := m.overlayWindowStart(m.translationSelected, len(m.translations), 16)
+		start := m.overlayWindowStart(m.translationSelected, len(m.translations), translationWindow)
 		offset := 0
 		if start > 0 {
 			offset = 1 // the "↑ N more" indicator line
 		}
-		idx := start + row - offset
+		itemRow := row - offset
+		if itemRow < 0 {
+			return nil
+		}
+		// Each translation is a name line plus a flavor line.
+		idx := start + itemRow/translationItemLines
 		if idx < 0 || idx >= len(m.translations) {
 			return nil
 		}

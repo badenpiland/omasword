@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"omasword/internal/api"
+	"omasword/internal/translations"
 )
 
 const baseURL = "https://bolls.life/static/translations"
@@ -147,6 +148,11 @@ func (c *Cache) IsCached(translation string) bool {
 func (c *Cache) DownloadTranslation(translation string) error {
 	if !api.ValidTranslationName(translation) {
 		return fmt.Errorf("invalid translation name %q", translation)
+	}
+	// The zip endpoint also has copyrighted translations. Never download
+	// those, even if a caller asks for one by name.
+	if !translations.IsBuiltin(translation) {
+		return fmt.Errorf("offline download is limited to public-domain translations (%s)", translation)
 	}
 	// Mark this download as active so the UI can poll for progress.
 	c.mu.Lock()

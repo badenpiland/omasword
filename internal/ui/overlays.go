@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"omasword/internal/translations"
 	"omasword/internal/version"
 	"strings"
 
@@ -85,7 +86,7 @@ func (m Model) renderTranslationSelect() string {
 		BorderForeground(m.currentTheme.BorderActive).
 		BorderBackground(bg).
 		Background(bg).
-		Width(56).
+		Width(68).
 		Padding(1, 2)
 
 	titleStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Bold(true)
@@ -106,33 +107,26 @@ func (m Model) renderTranslationSelect() string {
 		Background(bg).
 		Padding(0, 1)
 
+	mutedStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Muted).Background(bg).Italic(true).Padding(0, 1)
+
 	var content strings.Builder
 	content.WriteString(titleStyle.Render("Select Translation") + "\n\n")
 
 	if m.translations != nil {
-		// Show at most 16 translations centered on selection.
-		const window = 16
-		start, end := 0, len(m.translations)
-		if len(m.translations) > window {
-			start = m.translationSelected - window/2
-			if start < 0 {
-				start = 0
-			}
-			end = start + window
-			if end > len(m.translations) {
-				end = len(m.translations)
-				start = end - window
-			}
+		// Each row is a name line and a one-line flavor. Keep the window
+		// in items so a flavor line is never split off its name.
+		start := m.overlayWindowStart(m.translationSelected, len(m.translations), translationWindow)
+		end := start + translationWindow
+		if end > len(m.translations) {
+			end = len(m.translations)
 		}
-		mutedStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Muted).Background(bg).Italic(true)
 		if start > 0 {
-			content.WriteString(mutedStyle.Render(fmt.Sprintf("  ↑ %d more\n", start)))
+			content.WriteString(mutedStyle.Render(fmt.Sprintf("↑ %d more\n", start)))
 		}
 		for i := start; i < end; i++ {
 			trans := m.translations[i]
 			prefix := "  "
 			style := normalStyle
-			suffix := ""
 			isCurrent := trans.ShortName == m.selectedTranslation
 			if i == m.translationSelected {
 				prefix = "▸ "
@@ -140,14 +134,20 @@ func (m Model) renderTranslationSelect() string {
 			} else if isCurrent {
 				style = currentStyle
 			}
-			name := fmt.Sprintf("%-6s · %s", trans.ShortName, trans.FullName)
+			name := fmt.Sprintf("%-6s  %s", trans.ShortName, trans.FullName)
 			if isCurrent && i != m.translationSelected {
-				suffix = "  ●"
+				name += "  ●"
 			}
-			content.WriteString(style.Render(prefix+name+suffix) + "\n")
+			content.WriteString(style.Render(prefix+name) + "\n")
+			flavor := translations.LookupFlavor(trans.ShortName)
+			flavorStyle := mutedStyle
+			if i == m.translationSelected {
+				flavorStyle = selectedStyle
+			}
+			content.WriteString(flavorStyle.Render("        "+flavor) + "\n")
 		}
 		if end < len(m.translations) {
-			content.WriteString(mutedStyle.Render(fmt.Sprintf("  ↓ %d more", len(m.translations)-end)))
+			content.WriteString(mutedStyle.Render(fmt.Sprintf("↓ %d more", len(m.translations)-end)))
 		}
 	} else {
 		content.WriteString(normalStyle.Render("  " + m.translationsLoadingText()))
@@ -189,7 +189,10 @@ func (m Model) renderCacheManager() string {
 		Padding(0, 1)
 
 	var content strings.Builder
-	content.WriteString(titleStyle.Render("Download Translations") + "\n\n")
+	// The subtitle sits on the line the click math treats as the gap
+	// under the title, so item rows stay aligned with the mouse.
+	content.WriteString(titleStyle.Render("Download Translations") + "\n")
+	content.WriteString(mutedStyle.Render("Public-domain texts only") + "\n")
 
 	if m.translations != nil {
 		const window = 14
@@ -238,6 +241,11 @@ func (m Model) renderCacheManager() string {
 		}
 	} else {
 		content.WriteString(normalStyle.Render("  " + m.translationsLoadingText()))
+	}
+
+	if leftovers := m.leftoverDownloads(); len(leftovers) > 0 {
+		content.WriteString("\n\n" + mutedStyle.Render("No longer offered: "+strings.Join(leftovers, ", ")))
+		content.WriteString("\n" + mutedStyle.Render("Press X to remove them"))
 	}
 
 	// Live download progress bar, rendered just inside the panel below
@@ -295,6 +303,7 @@ func (m Model) renderAbout() string {
 	content.WriteString(labelStyle.Render("Repo:    ") + linkStyle.Render("github.com/badenpiland/omasword") + "\n")
 	content.WriteString(labelStyle.Render("Fork of: ") + linkStyle.Render("github.com/kmf/sword-tui") + "\n")
 	content.WriteString(labelStyle.Render("API:     ") + valueStyle.Render("bolls.life") + "\n")
+	content.WriteString(labelStyle.Render("Texts:   ") + valueStyle.Render("public domain, BSB default") + "\n")
 	content.WriteString(labelStyle.Render("License: ") + valueStyle.Render("GPL-2.0-or-later") + "\n\n")
 
 	content.WriteString(titleStyle.Render("Shortcuts") + "\n\n")
