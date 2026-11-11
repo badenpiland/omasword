@@ -43,7 +43,7 @@ func (m Model) comparisonVerseList() []int {
 }
 
 func (m Model) calculateHighlightedVerse() int {
-	if m.currentVerses == nil || len(m.currentVerses) == 0 {
+	if len(m.currentVerses) == 0 {
 		return 1
 	}
 
@@ -106,7 +106,7 @@ func (m Model) calculateHighlightedVerse() int {
 }
 
 func (m *Model) scrollToHighlightedVerse() {
-	if m.currentVerses == nil || len(m.currentVerses) == 0 {
+	if len(m.currentVerses) == 0 {
 		return
 	}
 

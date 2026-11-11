@@ -6,10 +6,6 @@ import (
 	"omasword/internal/reference"
 )
 
-func fuzzyMatchBook(query string, books []api.Book) (int, string, bool) {
-	return reference.MatchBook(query, books)
-}
-
 func parseReference(ref string, books []api.Book) (book, chapter, verseStart, verseEnd int, err error) {
 	return reference.Parse(ref, books)
 }

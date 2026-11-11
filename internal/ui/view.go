@@ -413,9 +413,6 @@ func (m Model) renderLeftPane(outerW, outerH int) string {
 	// the right pane.
 	written := sb.String()
 	lines := strings.Count(written, "\n") + 1
-	if !strings.HasSuffix(written, "\n") {
-		// last line already accounted for
-	}
 	for lines < innerH {
 		sb.WriteString("\n")
 		lines++
@@ -569,89 +566,4 @@ func (m Model) renderOverlayPanel() string {
 		return m.renderESVKey()
 	}
 	return ""
-}
-
-// dimContent applies a dimming effect to content by reducing color intensity
-// and adding a lighter overlay for a subtle fog/shadow effect
-func dimContent(content string) string {
-	lines := strings.Split(content, "\n")
-	dimmedLines := make([]string, len(lines))
-
-	// Create a dim style with lighter gray to keep text readable
-	// Using Faint() for dimming while maintaining visibility
-	dimStyle := lipgloss.NewStyle().
-		Faint(true).
-		Foreground(lipgloss.Color("#888888")) // Lighter gray for better visibility
-
-	for i, line := range lines {
-		// Apply faint style to dim the line
-		dimmedLines[i] = dimStyle.Render(line)
-	}
-
-	return strings.Join(dimmedLines, "\n")
-}
-
-func overlayContent(base, overlay string, width, height int) string {
-	// Dim the base content to create a focus effect
-	base = dimContent(base)
-
-	// Split both strings into lines
-	baseLines := strings.Split(base, "\n")
-	overlayLines := strings.Split(overlay, "\n")
-
-	// Ensure we have enough base lines
-	for len(baseLines) < height {
-		baseLines = append(baseLines, "")
-	}
-
-	// Overlay the sidebar lines onto the base lines
-	for i := 0; i < len(overlayLines) && i < len(baseLines); i++ {
-		overlayLine := overlayLines[i]
-		baseLine := baseLines[i]
-
-		// Get the visual width of the overlay line (accounting for ANSI codes)
-		overlayWidth := lipgloss.Width(overlayLine)
-
-		// Pad base line to full width if needed
-		baseWidth := lipgloss.Width(baseLine)
-		if baseWidth < width {
-			baseLine += strings.Repeat(" ", width-baseWidth)
-		}
-
-		// Replace the beginning of the base line with the overlay line
-		if overlayWidth > 0 {
-			// For lines with ANSI codes, we need to be careful
-			// Just replace the visual portion
-			if len(overlayLine) > 0 {
-				// Simple approach: trim base line and prepend overlay
-				baseRunes := []rune(baseLine)
-				visualPos := 0
-				runePos := 0
-				inAnsi := false
-
-				// Count runes until we reach the visual width
-				for runePos < len(baseRunes) && visualPos < overlayWidth {
-					if baseRunes[runePos] == '\x1b' {
-						inAnsi = true
-					}
-					if !inAnsi {
-						visualPos++
-					}
-					if inAnsi && baseRunes[runePos] == 'm' {
-						inAnsi = false
-					}
-					runePos++
-				}
-
-				// Combine overlay with remaining base content
-				if runePos < len(baseRunes) {
-					baseLines[i] = overlayLine + string(baseRunes[runePos:])
-				} else {
-					baseLines[i] = overlayLine
-				}
-			}
-		}
-	}
-
-	return strings.Join(baseLines, "\n")
 }

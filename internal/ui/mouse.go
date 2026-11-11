@@ -45,7 +45,7 @@ func (m Model) comparisonColumnAtX(x int) int {
 // line-counting logic in formatChapter so its mapping is consistent
 // with what's actually drawn.
 func (m Model) verseAtMouseY(y int) int {
-	if m.currentVerses == nil || len(m.currentVerses) == 0 {
+	if len(m.currentVerses) == 0 {
 		return 0
 	}
 	if m.mouseX < leftPaneOuterWidth || m.overlayActive() {

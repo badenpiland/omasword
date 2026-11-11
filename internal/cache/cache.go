@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,7 +113,10 @@ func NewCache() (*Cache, error) {
 }
 
 // migrateLegacyCache copies cached translations from a sword-tui cache
-// directory. Failures are ignored: the cache can always be rebuilt.
+// directory. Only public-domain translations are copied: sword-tui also
+// downloaded copyrighted ones (ESV, NIV, ...), which omasword does not
+// keep. Files larger than a download may extract to are skipped.
+// Failures are ignored: the cache can always be rebuilt.
 func migrateLegacyCache(from, to string) {
 	entries, err := os.ReadDir(from)
 	if err != nil {
@@ -122,7 +126,11 @@ func migrateLegacyCache(from, to string) {
 		return
 	}
 	for _, e := range entries {
-		if !e.Type().IsRegular() || filepath.Ext(e.Name()) != ".json" {
+		name, ok := strings.CutSuffix(e.Name(), ".json")
+		if !ok || !e.Type().IsRegular() || !translations.IsBuiltin(name) {
+			continue
+		}
+		if info, err := e.Info(); err != nil || info.Size() > maxExtractedBytes {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(from, e.Name()))

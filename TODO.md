@@ -5,9 +5,18 @@ multi-theme backlog were dropped when theming moved to Omarchy only.
 
 ## Distribution
 
-- [ ] **Omarchy package** — tag a first omasword release, then add a recipe
-  to `omacom/omarchy-pkgs` so it installs and updates through the Omarchy
-  menu (`omarchy-pkg-add omasword`).
+- [ ] **Omarchy package** — add a recipe to `omacom/omarchy-pkgs` so it
+  installs and updates through the Omarchy menu
+  (`omarchy-pkg-add omasword`).
+
+## ESV offline (within Crossway's 500-verse cap)
+
+- [ ] **Save ahead** — a key that saves the next chapters from where you
+  are, up to the cap, before going offline.
+- [ ] **Pin chapters** — keep chosen chapters when older ones are dropped;
+  they still count toward the cap.
+- [ ] **BSB fallback** — when offline and an ESV chapter isn't saved, show
+  the BSB for that chapter, clearly labeled, and switch back once online.
 
 ## Reading
 

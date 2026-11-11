@@ -1,6 +1,7 @@
 package esv
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -91,5 +92,31 @@ func TestCacheReloadsUnderTheCap(t *testing.T) {
 	got, total, notice, ok := again.Get(43, 3, 1)
 	if !ok || len(got) != 36 || total != 36 || notice != "from crossway" {
 		t.Fatalf("reloaded len %d total %d notice %q ok=%v", len(got), total, notice, ok)
+	}
+}
+
+func TestCacheHitDoesNotRewriteTheFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "esv-verses-v2.json")
+	c, err := OpenVerseCache(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Put(43, 3, 36, []api.Verse{{Verse: 1, Text: "a"}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := before.ModTime().Add(-time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, ok := c.Get(43, 3, 1); !ok {
+		t.Fatal("cache miss")
+	}
+	after, _ := os.Stat(path)
+	if !after.ModTime().Equal(old) {
+		t.Fatal("a cache hit rewrote the file")
 	}
 }
