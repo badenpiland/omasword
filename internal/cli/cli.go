@@ -9,12 +9,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"omasword/internal/api"
 	"omasword/internal/esv"
+	"omasword/internal/reference"
 	"omasword/internal/settings"
 	"omasword/internal/translations"
 )
@@ -61,9 +60,6 @@ func RunWith(stdout, stderr io.Writer, args []string) int {
 		fmt.Fprint(stdout, helpText)
 		return ExitOK
 	}
-	if opt.notice != "" {
-		fmt.Fprintln(stderr, opt.notice)
-	}
 	bolls := api.NewClient()
 	esvClient, err := esv.New(opt.key, esv.DefaultCacheDir())
 	if err != nil {
@@ -81,8 +77,7 @@ type options struct {
 	translation string
 	keyCmd      string
 	key         string // this process only; never printed or written
-	notice      string
-	explicit    bool // --translation was set
+	explicit    bool   // --translation was set
 }
 
 func parseArgs(args []string) (options, error) {
@@ -121,8 +116,12 @@ func parseArgs(args []string) (options, error) {
 		return options{}, err
 	}
 	opt.keyCmd = cfg.ESVAPIKeyCmd
-	opt.notice = cfg.KeyNotice
-	opt.key = esv.Resolve(cfg.ESVAPIKeyCmd)
+	opt.translation = strings.ToUpper(strings.TrimSpace(opt.translation))
+	// Only an ESV request needs the key. Looking it up for BSB would touch
+	// the keyring, or run esv_api_key_cmd, for nothing.
+	if opt.translation == esv.ID || (!opt.explicit && cfg.SelectedTranslation == esv.ID) {
+		opt.key = esv.Resolve(cfg.ESVAPIKeyCmd)
+	}
 	if !opt.explicit {
 		opt.translation = resolveDefault(cfg.SelectedTranslation, opt.key)
 	}
@@ -190,6 +189,7 @@ func resolveDefault(saved, key string) string {
 type bollsAPI interface {
 	GetChapter(translation string, book, chapter int) ([]api.Verse, error)
 	SearchVerses(translation, query string) (*api.SearchResponse, error)
+	GetBooks(translation string) ([]api.Book, error)
 }
 
 type esvAPI interface {
@@ -232,60 +232,28 @@ type ref struct {
 }
 
 func parsePassage(q string) (ref, error) {
-	q = strings.TrimSpace(q)
-	if len(q) >= 5 && strings.EqualFold(q[:5], "psalm") && (len(q) == 5 || q[5] == ' ') {
-		q = "Psalms" + q[5:]
-	}
-	id, rest, ok := esv.LookupBook(q)
-	if !ok {
-		return ref{}, fmt.Errorf("unknown book in %q (use a name such as \"John 3:16\" or \"1 John 1:9\")", q)
-	}
-	name, _ := esv.BookName(id)
-	rest = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rest), ":"))
-	if rest == "" {
-		return ref{}, fmt.Errorf("missing chapter in %q", q)
-	}
-	chapterPart, versePart, hasVerse := strings.Cut(rest, ":")
-	chapter, err := strconv.Atoi(strings.TrimSpace(chapterPart))
-	if err != nil || chapter < 1 {
-		return ref{}, fmt.Errorf("bad chapter in %q", q)
-	}
+	// The reader's parser: "John 3:16", "rom 8:28", "1jn 1:9",
+	// "ps 23 1-3" and "Song of Solomon 2" all work.
 	books := esv.Books()
-	if id > len(books) || chapter > books[id-1].Chapters {
-		return ref{}, fmt.Errorf("%s has no chapter %d", name, chapter)
-	}
-	out := ref{book: id, chapter: chapter, label: fmt.Sprintf("%s %d", name, chapter), whole: true}
-	if !hasVerse || strings.TrimSpace(versePart) == "" {
-		return out, nil
-	}
-	start, end, err := parseVerseRange(versePart)
+	id, chapter, start, end, err := reference.Parse(q, books)
 	if err != nil {
-		return ref{}, fmt.Errorf("bad verse in %q", q)
+		return ref{}, fmt.Errorf("unknown reference %q (try \"John 3:16\", \"rom 8:28\" or \"1 John 1:9\")", q)
+	}
+	book, chapter, start, end, err := reference.Validate(books, id, chapter, start, end)
+	if err != nil {
+		return ref{}, err
+	}
+	out := ref{book: book.BookID, chapter: chapter, label: fmt.Sprintf("%s %d", book.Name, chapter), whole: true}
+	if start == 0 {
+		return out, nil
 	}
 	out.start, out.end, out.whole = start, end, false
 	if start == end {
-		out.label = fmt.Sprintf("%s %d:%d", name, chapter, start)
+		out.label = fmt.Sprintf("%s %d:%d", book.Name, chapter, start)
 	} else {
-		out.label = fmt.Sprintf("%s %d:%d-%d", name, chapter, start, end)
+		out.label = fmt.Sprintf("%s %d:%d-%d", book.Name, chapter, start, end)
 	}
 	return out, nil
-}
-
-func parseVerseRange(s string) (start, end int, err error) {
-	s = strings.TrimSpace(s)
-	before, after, ranged := strings.Cut(s, "-")
-	start, err = strconv.Atoi(strings.TrimSpace(before))
-	if err != nil || start < 1 {
-		return 0, 0, fmt.Errorf("bad verse")
-	}
-	end = start
-	if ranged {
-		end, err = strconv.Atoi(strings.TrimSpace(after))
-		if err != nil || end < start {
-			return 0, 0, fmt.Errorf("bad verse")
-		}
-	}
-	return start, end, nil
 }
 
 func runPassage(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient esvAPI) int {
@@ -298,9 +266,12 @@ func runPassage(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient
 	var notice string
 	clipped := false
 	if opt.translation == esv.ID {
+		// Start the page at the first verse asked for, so a short range
+		// such as Jude 1:20-25 isn't cut at a fixed page boundary. The
+		// page is still capped at half the book or 500 verses.
 		start := 1
 		if !wanted.whole {
-			start = esv.PageStart(wanted.book, wanted.start)
+			start = wanted.start
 		}
 		page, err := esvClient.Chapter(wanted.book, wanted.chapter, start)
 		if err != nil {
@@ -400,8 +371,12 @@ func runSearch(stdout, stderr io.Writer, opt options, bolls bollsAPI, esvClient 
 		fmt.Fprintf(stdout, ", %d matches", resp.Total)
 	}
 	fmt.Fprintln(stdout, ")")
+	names := bookNames(opt.translation, bolls)
 	for _, v := range resp.Results {
-		name, _ := esv.BookName(v.Book)
+		name := names[v.Book]
+		if name == "" {
+			name, _ = esv.BookName(v.Book)
+		}
 		if name == "" {
 			name = fmt.Sprintf("Book %d", v.Book)
 		}
@@ -508,13 +483,28 @@ func verseDocs(verses []api.Verse) []verseDoc {
 	return out
 }
 
-var tagRe = regexp.MustCompile(`<[^>]*>`)
-
-// plainText drops the HTML markers bolls.life wraps around search hits
-// (<mark>) and any terminal control characters. The words stay.
+// plainText is the reader's cleanup (Strong's numbers, <mark> around
+// search hits, entities, control characters) on one line.
 func plainText(s string) string {
-	s = tagRe.ReplaceAllString(s, "")
-	return strings.Join(strings.Fields(api.SanitizeText(s)), " ")
+	return strings.Join(strings.Fields(api.PlainText(s)), " ")
+}
+
+// bookNames maps book IDs to the translation's own names, so the
+// Apocrypha in KJV and WEB search hits are named (Sirach, not "Book 71").
+// ESV, or a failed lookup, falls back to the 66-book canon.
+func bookNames(translation string, bolls bollsAPI) map[int]string {
+	names := map[int]string{}
+	if translation == esv.ID {
+		return names
+	}
+	books, err := bolls.GetBooks(translation)
+	if err != nil {
+		return names
+	}
+	for _, b := range books {
+		names[b.BookID] = b.Name
+	}
+	return names
 }
 
 func redactErr(err error, key string) error {

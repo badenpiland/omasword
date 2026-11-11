@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,6 +22,7 @@ func TestMain(m *testing.M) {
 type fakeBolls struct {
 	verses []api.Verse
 	search *api.SearchResponse
+	books  []api.Book
 	err    error
 	calls  int
 }
@@ -35,6 +35,10 @@ func (f *fakeBolls) GetChapter(string, int, int) ([]api.Verse, error) {
 func (f *fakeBolls) SearchVerses(string, string) (*api.SearchResponse, error) {
 	f.calls++
 	return f.search, f.err
+}
+
+func (f *fakeBolls) GetBooks(string) ([]api.Book, error) {
+	return f.books, nil
 }
 
 type fakeESV struct {
@@ -291,35 +295,6 @@ func TestOutputNeverContainsTheAPIKey(t *testing.T) {
 	}
 }
 
-func TestLegacyKeyMigrationIsNotPrinted(t *testing.T) {
-	keyring.MockInit()
-	t.Setenv("OMASWORD_ESV_API_KEY", "")
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-	cfg := filepath.Join(dir, "omasword")
-	if err := os.MkdirAll(cfg, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	raw := []byte(`{"selected_translation":"BSB","esv_api_key":"test-key-not-real"}`)
-	if err := os.WriteFile(filepath.Join(cfg, "config.json"), raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	opt, err := parseArgs([]string{"--passage", "John 3:16", "--translation", "BSB"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(opt.notice, "test-key-not-real") || opt.key != "test-key-not-real" {
-		t.Fatal("migration leaked or dropped the key")
-	}
-	data, err := os.ReadFile(filepath.Join(cfg, "config.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), "test-key-not-real") || strings.Contains(string(data), "esv_api_key") {
-		t.Fatalf("config still has the key: %s", data)
-	}
-}
-
 func TestFlagsAfterPositionalReference(t *testing.T) {
 	keyring.MockInit()
 	t.Setenv("OMASWORD_ESV_API_KEY", "")
@@ -368,7 +343,6 @@ func TestUsageErrorsExit1(t *testing.T) {
 		{"--no-such-flag"},
 		{"--passage", "Not A Book 1:1"},
 		{"--passage", "John 3:0"},
-		{"--passage", "John 3:5-2"},
 		{"--passage", "John 3:16", "--search", "love"},
 		{"Psalm 23:1-3", "--translation"},
 	}
@@ -411,5 +385,66 @@ func TestWantsCLI(t *testing.T) {
 	}
 	if !WantsCLI([]string{"John", "3:16"}) || !WantsCLI([]string{"--search", "love"}) || !WantsCLI([]string{"-h"}) {
 		t.Fatal("passage, search, and help should select CLI mode")
+	}
+}
+
+func TestReaderStyleReferences(t *testing.T) {
+	cases := map[string]string{
+		"rom 8:28":          "Romans 8:28",
+		"1jn 1:9":           "1 John 1:9",
+		"ps 23 1-3":         "Psalms 23:1-3",
+		"Psalm 23":          "Psalms 23",
+		"song of solomon 2": "Song of Solomon 2",
+		"John 3:5-2":        "John 3:2-5",
+	}
+	for in, want := range cases {
+		got, err := parsePassage(in)
+		if err != nil || got.label != want {
+			t.Errorf("parsePassage(%q) = %q, %v; want %q", in, got.label, err, want)
+		}
+	}
+}
+
+func TestTranslationNameIgnoresCase(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	opt, err := parseArgs([]string{"John 3:16", "--translation", "kjv"})
+	if err != nil || opt.translation != "KJV" {
+		t.Fatalf("translation %q, %v", opt.translation, err)
+	}
+}
+
+func TestBSBRequestDoesNotLookUpTheKey(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("OMASWORD_ESV_API_KEY", "")
+	if err := esv.SaveKey("test-key-not-real"); err != nil {
+		t.Fatal(err)
+	}
+	opt, err := parseArgs([]string{"John 3:16", "--translation", "BSB"})
+	if err != nil || opt.key != "" {
+		t.Fatalf("key looked up for BSB (%v)", err)
+	}
+}
+
+func TestStrongsNumbersAndApocryphaNames(t *testing.T) {
+	bolls := &fakeBolls{
+		search: &api.SearchResponse{Total: 2, Results: []api.Verse{
+			{Book: 62, Chapter: 5, Verse: 18, Text: "he that is <mark>begotten</mark><S>1080</S> of<S>1537</S> God<S>2316</S>"},
+			{Book: 71, Chapter: 17, Verse: 18, Text: "Whom, being his firstborn"},
+		}},
+		books: []api.Book{{BookID: 62, Name: "1 John"}, {BookID: 71, Name: "Sirach"}},
+	}
+	opt := options{search: "begotten", translation: "KJV", explicit: true}
+	var out, errBuf bytes.Buffer
+	if code := execute(&out, &errBuf, opt, bolls, &fakeESV{}); code != ExitOK {
+		t.Fatalf("code %d: %s", code, errBuf.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "1 John 5:18 he that is begotten of God") {
+		t.Errorf("Strong's numbers or tags left in: %s", got)
+	}
+	if !strings.Contains(got, "Sirach 17:18") || strings.Contains(got, "Book 71") {
+		t.Errorf("Apocrypha book not named: %s", got)
 	}
 }

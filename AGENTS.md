@@ -1,7 +1,10 @@
 # AGENTS.md
 
-Hard constraints for people and coding agents changing omasword. The
-reader is GPL-2.0-or-later, a fork of [kmf/sword-tui](https://github.com/kmf/sword-tui).
+Guidance and hard constraints for people and coding agents changing
+omasword, a terminal Bible reader for Omarchy written in Go on the charm v2
+stack (Bubble Tea, Bubbles, Lip Gloss). It is GPL-2.0-or-later, a fork of
+[kmf/sword-tui](https://github.com/kmf/sword-tui). `CLAUDE.md` imports this
+file; keep project guidance here.
 Do not merge, tag, release, or push to that upstream from a task that
 did not ask for it.
 
@@ -47,8 +50,8 @@ No plaintext secrets in files, logs, tests, or commits.
 - `OMASWORD_ESV_API_KEY` exists for one process (CI or a single command).
   Never persist it, and do not tell users to put it in a shell startup
   file. Tests that set it use an obvious placeholder and do not print it.
-- An old `esv_api_key` field is migrated into the keyring and deleted from
-  the file. If the keyring refuses it, the field is still deleted.
+- Look the key up only when ESV is in use. A BSB reader must not touch
+  the keyring or run `esv_api_key_cmd` (which may prompt for a password).
 
 ## Build, test, and run
 
@@ -75,12 +78,16 @@ go test ./...
 - `internal/translations`: the public-domain allowlist, picker order,
   one-line flavor text, and the BSB default.
 - `internal/api`: bolls.life HTTP client. Responses are untrusted.
-  `SanitizeText` strips terminal control characters. `ValidTranslationName`
+  `SanitizeText` strips terminal control characters, and `PlainText`
+  turns verse markup into display text (it drops the Strong's numbers
+  KJV and ASV carry, `<S>7225</S>`). `ValidTranslationName`
   gates names used in URLs and paths. Requests are refused unless the
   translation is on the allowlist.
 - `internal/cache`: offline downloads of allowlisted translations only,
   size-capped, written via a temp file and rename, under
   `~/.cache/omasword/translations`.
+- `internal/reference`: parses references such as `rom8:28` or
+  `1 john 3 16`. The reader and the CLI share it.
 - `internal/esv`: Crossway's passage API. Verse cache and rate-limit
   journal live under `~/.cache/omasword` and do not contain the key.
 - `internal/settings`: `~/.config/omasword/config.json` (translation,
@@ -88,10 +95,15 @@ go test ./...
   API key is not in this file. Migrates a sword-tui config on first run.
 - `internal/ui`: the Bubble Tea model. The reading pane is pre-rendered
   into `m.content`; color or width changes call `rerenderContent`. Keys
-  reach a text input only when `typingInInput` is true. Book IDs are
-  1–66 and are not slice indexes.
-- `internal/theme`: colors from the active Omarchy theme, polled once a
-  second, with Tokyo Night as the fallback.
+  reach a text input only when `typingInInput` is true. Look books up by
+  `BookID`; IDs are not slice indexes, and KJV and WEB include
+  Apocrypha books numbered above 66.
+- `internal/theme`: colors from the active Omarchy theme (`colors.toml`
+  under `$XDG_STATE_HOME/omarchy/current/theme`, or the older
+  `~/.config/omarchy/current/theme`), polled once a second, with Tokyo
+  Night as the fallback. Theme changes go through `setTheme`.
+- `assets/`: launcher icon (`make-icon.py` regenerates it) and social
+  preview.
 
 ## CLI for scripts and agents
 
@@ -102,8 +114,9 @@ omasword --search love --json
 ```
 
 `--translation` defaults to the saved choice when that choice is still
-allowed, otherwise BSB. Names look like `John 3:16`, `John 3:16-18`,
-`1 John 1:9`, `Song of Solomon 2`, or `Psalm 23`.
+allowed, otherwise BSB; names are not case-sensitive. References use the
+reader's parser: `John 3:16`, `John 3:16-18`, `rom 8:28`, `1jn 1:9`,
+`Song of Solomon 2`, or `Psalm 23`.
 
 `--json` prints one object to stdout. On success the passage object has
 `translation`, `reference`, `book`, `chapter`, and `verses`
