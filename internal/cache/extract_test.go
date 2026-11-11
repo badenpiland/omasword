@@ -3,10 +3,13 @@ package cache
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"omasword/internal/api"
 )
 
 func writeZip(t *testing.T, path, name, body string, corrupt bool) {
@@ -58,7 +61,9 @@ func TestExtractJSONFailureLeavesNoCacheFile(t *testing.T) {
 func TestExtractJSONSuccess(t *testing.T) {
 	dir := t.TempDir()
 	zipPath := filepath.Join(t.TempDir(), "KJV.zip")
-	body := `[{"pk":1,"verse":1,"text":"In the beginning","book":1,"chapter":1}]`
+	// Book 67 stands in for the extra books bolls.life's KJV carries.
+	body := `[{"pk":1,"verse":1,"text":"In the beginning","book":1,"chapter":1},` +
+		`{"pk":2,"verse":1,"text":"not canon","book":67,"chapter":1}]`
 	writeZip(t, zipPath, "KJV.json", body, false)
 
 	c := &Cache{cacheDir: dir}
@@ -66,8 +71,15 @@ func TestExtractJSONSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(filepath.Join(dir, "KJV.json"))
-	if err != nil || string(got) != body {
-		t.Fatalf("KJV.json = %q, %v", got, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var verses []api.Verse
+	if err := json.Unmarshal(got, &verses); err != nil {
+		t.Fatal(err)
+	}
+	if len(verses) != 1 || verses[0].Book != 1 || verses[0].Text != "In the beginning" {
+		t.Fatalf("KJV.json = %s, want only Genesis 1:1", got)
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 1 {

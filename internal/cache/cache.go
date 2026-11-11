@@ -236,14 +236,31 @@ func (c *Cache) extractJSON(zipPath, translation string) error {
 			}
 			defer os.Remove(tmp.Name()) // no-op after a successful rename
 
-			n, err := io.Copy(tmp, io.LimitReader(rc, maxExtractedBytes+1))
+			data, err := io.ReadAll(io.LimitReader(rc, maxExtractedBytes+1))
 			if err != nil {
 				tmp.Close()
 				return err
 			}
-			if n > maxExtractedBytes {
+			if len(data) > maxExtractedBytes {
 				tmp.Close()
 				return fmt.Errorf("extracted translation exceeds %d bytes", maxExtractedBytes)
+			}
+			// Keep only the 66 books. bolls.life's KJV and WEB files
+			// also carry books numbered above 66.
+			var all []api.Verse
+			if err := json.Unmarshal(data, &all); err != nil {
+				tmp.Close()
+				return fmt.Errorf("translation file is not valid JSON: %w", err)
+			}
+			canon := all[:0]
+			for _, v := range all {
+				if api.IsCanon(v.Book) {
+					canon = append(canon, v)
+				}
+			}
+			if err := json.NewEncoder(tmp).Encode(canon); err != nil {
+				tmp.Close()
+				return err
 			}
 			if err := tmp.Close(); err != nil {
 				return err
@@ -293,6 +310,10 @@ func (c *Cache) loadIndex(translation string) (map[chapterKey][]api.Verse, error
 	}
 	index := make(map[chapterKey][]api.Verse)
 	for _, v := range all {
+		// A file downloaded before the 66-book filter may hold others.
+		if !api.IsCanon(v.Book) {
+			continue
+		}
 		v.Text = api.SanitizeText(v.Text)
 		k := chapterKey{v.Book, v.Chapter}
 		index[k] = append(index[k], v)
