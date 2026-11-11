@@ -77,8 +77,9 @@ func (c *VerseCache) Get(book, chapter, startVerse int) (verses []api.Verse, tot
 		if e.Verses[0].Verse != startVerse {
 			continue
 		}
+		// Recency is kept in memory and written with the next Put; a
+		// cache hit doesn't rewrite the file.
 		e.Used = c.now().UnixNano()
-		_ = c.save()
 		return append([]api.Verse(nil), e.Verses...), e.Total, c.file.Notice, true
 	}
 	return nil, 0, "", false

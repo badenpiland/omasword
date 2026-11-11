@@ -86,3 +86,17 @@ func TestExtractJSONSuccess(t *testing.T) {
 		t.Fatalf("expected only KJV.json, got %v", entries)
 	}
 }
+
+func TestMigrationCopiesOnlyPublicDomainTranslations(t *testing.T) {
+	from, to := t.TempDir(), t.TempDir()
+	for _, name := range []string{"KJV.json", "ESV.json", "NIV.json", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(from, name), []byte("[]"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	migrateLegacyCache(from, to)
+	entries, _ := os.ReadDir(to)
+	if len(entries) != 1 || entries[0].Name() != "KJV.json" {
+		t.Fatalf("migrated %v, want only KJV.json", entries)
+	}
+}

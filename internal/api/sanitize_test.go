@@ -9,7 +9,7 @@ func TestSanitizeText(t *testing.T) {
 		"clear\x1b[2Jscreen":                "clear[2Jscreen",
 		"8-bit CSI\u009b31m":                "8-bit CSI31m",
 		"line\none\ttab":                    "line one tab",
-		"bidi ‮override‬":                   "bidi override",
+		"bidi \u202eoverride\u202c":         "bidi override",
 		"“quotes” — em dash, ünïcödé":       "“quotes” — em dash, ünïcödé",
 	}
 	for in, want := range tests {

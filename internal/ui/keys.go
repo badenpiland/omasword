@@ -366,7 +366,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 					m.wordSearchInput.Blur()
 					return m, m.loadReadingSearch(query), true
 				}
-			} else if m.wordSearchResults != nil && len(m.wordSearchResults) > 0 {
+			} else if len(m.wordSearchResults) > 0 {
 				// Navigate to selected result
 				result := m.wordSearchResults[m.wordSearchSelected]
 				m.currentBook = result.Book
