@@ -163,8 +163,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 		} else if m.mode == modeWordSearch && m.wordSearchResults == nil && !m.wordSearchLoading {
 			// Let it pass through to word search input
 		} else if m.mode != modeReader {
-			m.mode = modeReader
-			return m, nil, true
+			m, cmd := m.backToReader()
+			return m, cmd, true
 		}
 	case "t":
 		if m.mode == modeReader {
@@ -450,10 +450,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				m.mode = modeComparison
 				return m, nil, true
 			}
-			m.mode = modeReader
 			m.wordSearchResults = nil
 			m.wordSearchInput.SetValue("")
-			return m, nil, true
+			m, cmd := m.backToReader()
+			return m, cmd, true
 		}
 		if m.focus == paneBooks {
 			m.focus = paneContent
@@ -461,4 +461,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 		}
 	}
 	return m, nil, false
+}
+
+// backToReader returns to the reader. Showing a comparison replaces the
+// reading pane and drops the loaded chapter, so leaving one (or a
+// translation picker opened from one of its columns) reloads the chapter.
+func (m Model) backToReader() (Model, tea.Cmd) {
+	fromComparison := m.mode == modeComparison || m.comparisonPickerColumn >= 0
+	m.mode = modeReader
+	m.comparisonPickerColumn = -1
+	if !fromComparison {
+		return m, nil
+	}
+	m.loading = true
+	return m, m.loadReadingChapter(m.currentBook, m.currentChapter)
 }
