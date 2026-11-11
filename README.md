@@ -91,6 +91,17 @@ are left in place, so both programs can be installed side by side.
 omasword
 ```
 
+Print a passage or a search without opening the reader (for scripts and agents):
+
+```bash
+omasword --passage "John 3:16"
+omasword "1 John 1:9" --translation WEB --json
+omasword --search love
+omasword --help
+```
+
+The default translation is the BSB. `--json` prints one JSON object. Exit codes are stable: 0 printed a result, 1 usage error, 2 the translation is not allowed or the ESV key is missing, 3 the text could not be fetched. ESV output follows the same limits as the reader. See `omasword --help`.
+
 ### Keyboard Shortcuts
 
 - `[` / `]` - Focus books pane / content pane

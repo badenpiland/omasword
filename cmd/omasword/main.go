@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"omasword/internal/cache"
+	"omasword/internal/cli"
 	"omasword/internal/ui"
 	"omasword/internal/version"
 	"os"
@@ -12,6 +13,12 @@ import (
 )
 
 func main() {
+	// Passage and search flags never start the reader. --version stays
+	// on the flag set below so existing scripts keep working.
+	if cli.WantsCLI(os.Args[1:]) {
+		os.Exit(cli.Run(os.Args[1:]))
+	}
+
 	// Parse command line flags
 	versionFlag := flag.Bool("version", false, "Print version information")
 	flag.Parse()
