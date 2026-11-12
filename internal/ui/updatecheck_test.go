@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,5 +99,25 @@ func TestSavingSettingsKeepsUpdateCheckOptOut(t *testing.T) {
 	}
 	if err := json.Unmarshal(data, &saved); err != nil || saved.UpdateCheck == nil || *saved.UpdateCheck {
 		t.Fatalf("opt-out lost on save: %s", data)
+	}
+}
+
+// The notice shows over the saved-verse count, but never hides the label
+// that says the BSB is standing in for the ESV.
+func TestUpdateNoticePriority(t *testing.T) {
+	m := esvReader(t)
+	m, _ = press(t, m, "S")
+	m.status = ""
+	m.updateNotice = "v0.4.0"
+	if bar := plain(m.renderStatusBar()); !strings.Contains(bar, "v0.4.0 available") {
+		t.Fatalf("saved count hid the notice: %q", bar)
+	}
+	next, _ := m.Update(chapterLoadedMsg{
+		verses: m.currentVerses, book: 2, chapter: 1,
+		fallback: "BSB", fallbackErr: errors.New("dial tcp: network is unreachable"),
+	})
+	m = next.(Model)
+	if bar := plain(m.renderStatusBar()); !strings.Contains(bar, "BSB shown") {
+		t.Fatalf("notice hid the BSB label: %q", bar)
 	}
 }

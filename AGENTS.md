@@ -75,6 +75,14 @@ go test ./...
 ./omasword --help           # non-interactive mode
 ```
 
+Static checks run before a release:
+
+```bash
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks all,-ST1000,-ST1003 ./...
+go run golang.org/x/tools/cmd/deadcode@latest -test ./...   # -test: updatetest is test-only
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+```
+
 `gofmt -w` changed Go files before committing. Stage paths explicitly
 (`git add <paths>`), never `git add -A`. Commit messages are
 [Conventional Commits](https://www.conventionalcommits.org/).
