@@ -10,6 +10,8 @@ omasword is a fork of [sword-tui](https://github.com/kmf/sword-tui) by Karl
 Fischer, renamed and adapted for [Omarchy](https://omarchy.org). It is
 distributed under the same GPL-2.0-or-later license; see [License](#license).
 
+![omasword showing Psalm 23 in the Berean Standard Bible, with the books list on the left](assets/screenshot.png)
+
 ## Features
 
 ### Navigation
@@ -21,6 +23,8 @@ distributed under the same GPL-2.0-or-later license; see [License](#license).
 
 ### Bible Access
 - **Multiple Translations**: Switch between public-domain English translations (Berean Standard Bible by default)
+- **ESV with Your Own Key**: Read the ESV online with a free key from [api.esv.org](https://api.esv.org/), kept in your system keyring
+- **Saved ESV Verses**: Select verses and press `S` to read them offline, within Crossway's limits
 - **Side-by-Side Comparison**: Per-column translation pickers for parallel reading
 - **Verse Lookup**: Jump directly to any book, chapter, and verse
 - **Offline Cache**: Download public-domain translations, with a byte-level progress bar
@@ -39,8 +43,29 @@ distributed under the same GPL-2.0-or-later license; see [License](#license).
 - **Click-and-Drag Range Selection**: Select multi-verse ranges with the mouse
 - **Search/Filter**: Filter verses with `/`
 - **Quick Navigation**: `n`/`p` step between chapters; sidebars jump between books and translations
+- **Scriptable CLI**: `omasword "John 3:16" --json` prints a passage or a search for scripts and agents
+- **Self-Update**: `omasword update` installs the newest release, checked against its SHA-256
 
 ## Installation
+
+### Download a release
+
+No Go needed. This downloads the newest build for your machine (Linux amd64
+or arm64), checks its SHA-256, and installs it to `~/.local/bin` (already on
+your `PATH` on Omarchy):
+
+```bash
+arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+cd "$(mktemp -d)"
+curl -fsSLO "https://github.com/badenpiland/omasword/releases/latest/download/omasword-linux-$arch.tar.gz"
+curl -fsSLO "https://github.com/badenpiland/omasword/releases/latest/download/SHA256SUMS"
+sha256sum --ignore-missing -c SHA256SUMS
+tar -xzf "omasword-linux-$arch.tar.gz"
+install -Dm755 "omasword-linux-$arch" ~/.local/bin/omasword
+```
+
+Stay in that folder to [add it to the app launcher](#add-it-to-the-omarchy-app-launcher)
+next; the icon is in `assets/`.
 
 ### From Source
 
@@ -89,7 +114,8 @@ repeat the last two commands above.
 
 ### Add it to the Omarchy app launcher
 
-From the same `omasword` folder, register it as a TUI app with its icon:
+From the `omasword` folder (the source checkout, or the folder you unpacked
+the release in), register it as a TUI app with its icon:
 
 ```bash
 omarchy-tui-install omasword omasword tile "$PWD/assets/omasword.png"
