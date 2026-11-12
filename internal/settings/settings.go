@@ -20,6 +20,9 @@ type Settings struct {
 	// ComparisonColumns is how many translations the comparison view
 	// shows side by side (2 to 4). 0 means the default, 2.
 	ComparisonColumns int `json:"comparison_columns,omitempty"`
+	// UpdateCheck set to false stops the reader's once-a-day check for a
+	// newer release. Unset means on.
+	UpdateCheck *bool `json:"update_check,omitempty"`
 }
 
 // legacyDirName is the config directory used before the rename from

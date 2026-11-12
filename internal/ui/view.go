@@ -164,6 +164,10 @@ func (m Model) renderStatusBar() string {
 		right = lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Render(ansi.Truncate("● "+m.status, max(m.width/2, 20), "…"))
 	} else if m.degraded() {
 		right = lipgloss.NewStyle().Foreground(m.currentTheme.Warning).Background(bg).Render("● " + m.fallbackStatus())
+	} else if m.updateNotice != "" {
+		// Below the stand-in label, which AGENTS.md requires in the
+		// status bar, and above the saved-verse count, so it shows.
+		right = lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Render(ansi.Truncate("● "+m.updateNotice+" available: omasword update", max(m.width/2, 20), "…"))
 	} else if m.showingESV() && len(m.savedHere) > 0 {
 		right = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render(fmt.Sprintf("● %d saved here", len(m.savedHere)))
 	} else if m.cache != nil && m.cache.IsCached(m.selectedTranslation) {

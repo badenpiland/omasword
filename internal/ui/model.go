@@ -123,6 +123,11 @@ type Model struct {
 	// every ~120ms while a download is running.
 	downloadProgress float64
 	progressBar      progress.Model
+	// updateNotice is a newer release tag found by the daily check, or "".
+	updateNotice string
+	// updateCheck is config.json's update_check, kept so saving settings
+	// doesn't drop an opt-out.
+	updateCheck *bool
 	// ESV is online-only. The key lives in the OS keyring (or a command,
 	// or a one-shot environment variable). It is not a field here and it
 	// is not written to config. esvKeyCmd is the command string only.
@@ -282,6 +287,7 @@ func NewModel() Model {
 
 	m := Model{
 		client:                 api.NewClient(),
+		updateCheck:            cfg.UpdateCheck,
 		textInput:              ti,
 		pickerFilterInput:      pickerFilter,
 		wordSearchInput:        wordSearch,
@@ -323,6 +329,7 @@ func (m Model) Init() tea.Cmd {
 		m.loadReadingBooks(),
 		m.loadReadingChapter(m.currentBook, m.currentChapter),
 		omarchyTick(),
+		checkForUpdate(),
 	)
 }
 

@@ -270,6 +270,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd, _ := m.handleListLoad(msg)
 		cmds = append(cmds, cmd)
 
+	case updateAvailableMsg:
+		m.updateNotice = msg.tag
+		return m, nil
+
 	case esvKeyResolvedMsg:
 		if msg.key != "" && m.esvClient != nil && !m.esvClient.HasKey() {
 			m.esvClient.SetKey(msg.key)
@@ -519,6 +523,7 @@ func (m Model) saveSettings() error {
 		CurrentChapter:      m.currentChapter,
 		ESVAPIKeyCmd:        m.esvKeyCmd,
 		ComparisonColumns:   len(m.comparisonTranslations),
+		UpdateCheck:         m.updateCheck,
 	})
 }
 

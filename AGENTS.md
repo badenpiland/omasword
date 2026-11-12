@@ -75,6 +75,14 @@ go test ./...
 ./omasword --help           # non-interactive mode
 ```
 
+Static checks run before a release:
+
+```bash
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks all,-ST1000,-ST1003 ./...
+go run golang.org/x/tools/cmd/deadcode@latest -test ./...   # -test: updatetest is test-only
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+```
+
 `gofmt -w` changed Go files before committing. Stage paths explicitly
 (`git add <paths>`), never `git add -A`. Commit messages are
 [Conventional Commits](https://www.conventionalcommits.org/).
@@ -100,9 +108,17 @@ go test ./...
 - `internal/esv`: Crossway's passage API. Verse cache and rate-limit
   journal live under `~/.cache/omasword` and do not contain the key.
 - `internal/settings`: `~/.config/omasword/config.json` (translation,
-  book, chapter, comparison column count, optional `esv_api_key_cmd`),
+  book, chapter, comparison column count, optional `esv_api_key_cmd`,
+  optional `update_check`),
   written atomically. The API key is not in this file. Migrates a
   sword-tui config on first run.
+- `internal/update`: `omasword update`. Reads GitHub's latest release,
+  compares its tag with `internal/version`, and replaces the running
+  binary (temp file beside it, then rename). It downloads only from the
+  omasword releases URL, requires the release's `SHA256SUMS` (written by
+  `.github/workflows/release.yml`) to match, never uses sudo, and refuses
+  binaries under `/usr/`. Tests use `internal/update/updatetest`, an
+  httptest fake of GitHub; they must never reach the real API.
 - `internal/ui`: the Bubble Tea model. The reading pane is pre-rendered
   into `m.content`; color or width changes call `rerenderContent`. Keys
   reach a text input only when `typingInInput` is true. Look books up by
@@ -146,3 +162,28 @@ Exit codes:
 
 A search with zero hits is exit 0. Do not treat stderr text as stable;
 branch on the exit code.
+
+### Updating
+
+```bash
+omasword update           # install the newest release over this binary
+omasword update --check   # only report
+```
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Updated, or already on the newest release |
+| 1 | Usage: unknown flag or extra argument |
+| 3 | GitHub could not be reached, or answered with an error or rate limit |
+| 4 | `--check` only: a newer release is available |
+| 5 | Could not install: binary's folder not writable, binary under `/usr/`, no build for this OS or CPU, or the download failed checksum or archive checks |
+
+The reader checks for a newer release in the background through
+`update.Notice`, at most once every 24 hours. Failed checks count
+toward that limit. The time of the last check and the newest tag seen
+are kept in `~/.cache/omasword/update-check.json`, and nothing else is
+stored. A newer tag shows in the status bar. The check is off when
+config.json has `"update_check": false` or when
+`OMASWORD_NO_UPDATE_CHECK` is set to anything other than `0`, and it
+is skipped for binaries under `/usr/`. It must never block startup or
+show an error. ui tests stub `findUpdate`.
