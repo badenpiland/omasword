@@ -50,6 +50,9 @@ func Run(args []string) int {
 
 // RunWith is Run with explicit writers, for tests.
 func RunWith(stdout, stderr io.Writer, args []string) int {
+	if len(args) > 0 && args[0] == "update" {
+		return runUpdate(stdout, stderr, args[1:])
+	}
 	opt, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -519,6 +522,7 @@ Usage:
   omasword --passage "John 3:16" [--translation BSB] [--json]
   omasword "1 John 1:9"
   omasword --search love [--translation WEB] [--json]
+  omasword update [--check]
 
 Book names are the English names (Genesis, Psalms, Song of Solomon,
 1 John). A chapter alone prints that chapter. "John 3:16" and
@@ -536,4 +540,14 @@ Exit codes:
   1  usage error (bad reference, missing flags)
   2  translation is not allowed, or ESV has no API key
   3  the text could not be fetched (network, rate limit, rejected key)
+
+omasword update installs the newest release from GitHub over this binary,
+after checking its SHA-256. It never uses sudo. --check only reports.
+Its exit codes:
+  0  updated, or already up to date
+  1  usage error
+  3  GitHub could not be reached
+  4  a newer release is available (--check only)
+  5  could not install: binary not writable or from a system package,
+     no build for this system, or the download failed verification
 `

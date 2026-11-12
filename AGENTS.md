@@ -103,6 +103,13 @@ go test ./...
   book, chapter, comparison column count, optional `esv_api_key_cmd`),
   written atomically. The API key is not in this file. Migrates a
   sword-tui config on first run.
+- `internal/update`: `omasword update`. Reads GitHub's latest release,
+  compares its tag with `internal/version`, and replaces the running
+  binary (temp file beside it, then rename). It downloads only from the
+  omasword releases URL, requires the release's `SHA256SUMS` (written by
+  `.github/workflows/release.yml`) to match, never uses sudo, and refuses
+  binaries under `/usr/`. Tests use `internal/update/updatetest`, an
+  httptest fake of GitHub; they must never reach the real API.
 - `internal/ui`: the Bubble Tea model. The reading pane is pre-rendered
   into `m.content`; color or width changes call `rerenderContent`. Keys
   reach a text input only when `typingInInput` is true. Look books up by
@@ -146,3 +153,20 @@ Exit codes:
 
 A search with zero hits is exit 0. Do not treat stderr text as stable;
 branch on the exit code.
+
+### Updating
+
+```bash
+omasword update           # install the newest release over this binary
+omasword update --check   # only report
+```
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Updated, or already on the newest release |
+| 1 | Usage: unknown flag or extra argument |
+| 3 | GitHub could not be reached, or answered with an error or rate limit |
+| 4 | `--check` only: a newer release is available |
+| 5 | Could not install: binary's folder not writable, binary under `/usr/`, no build for this OS or CPU, or the download failed checksum or archive checks |
+
+The reader makes no network call to check for updates.

@@ -60,8 +60,23 @@ go build -o omasword ./cmd/omasword
 install -Dm755 omasword ~/.local/bin/omasword
 ```
 
-To update later, run `git pull` in the `omasword` folder and repeat the last
-two commands.
+### Updating
+
+To update to the newest release:
+
+```bash
+omasword update
+```
+
+It downloads the release build for your machine (Linux amd64 or arm64) from
+GitHub, checks it against the release's SHA-256 checksums, and swaps it in
+place of the running binary. It never uses `sudo`: if the binary sits in a
+folder you can't write, such as one owned by a system package, it says so
+and stops. `omasword update --check` only reports whether a newer release
+exists (exit code 4 when one does).
+
+Built from source? You can also run `git pull` in the `omasword` folder and
+repeat the last two commands above.
 
 ### Add it to the Omarchy app launcher
 
