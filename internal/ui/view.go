@@ -211,6 +211,9 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 		hs = []hint{{"↑↓", "navigate"}, {"⏎", "download"}, {"x", "delete"}, {"esc", "close"}}
 	case modeAbout:
 		hs = []hint{{"esc", "close"}}
+		if m.aboutMaxScroll() > 0 {
+			hs = []hint{{"↑↓", "scroll"}, {"esc", "close"}}
+		}
 	case modeSaved:
 		hs = []hint{{"↑↓", "navigate"}, {"⏎", "open"}, {"x", "remove"}, {"esc", "close"}}
 	case modeWordSearch:
@@ -508,6 +511,11 @@ func (m Model) renderRightPane(outerW, outerH int) string {
 		errStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Error).Background(bg)
 		muted := lipgloss.NewStyle().Foreground(m.currentTheme.Muted).Background(bg)
 		body = errStyle.Render("Couldn't load this chapter") + "\n" + muted.Render("retrying…")
+		// Fill the viewport's height so the pane's border lines up with
+		// the books pane, as it does when text is shown.
+		if h := m.viewport.Height(); h > 2 {
+			body += strings.Repeat("\n", h-2)
+		}
 	}
 
 	innerW := outerW - 2 - 2 - 4 // slot margin + border + padding(1,2)

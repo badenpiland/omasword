@@ -2,13 +2,15 @@ package ui
 
 import (
 	"fmt"
+	"strings"
+
 	"omasword/internal/esv"
 	"omasword/internal/version"
-	"strings"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func (m Model) renderSearchPanel() string {
@@ -309,6 +311,26 @@ func (m Model) renderCacheManager() string {
 }
 
 func (m Model) renderAbout() string {
+	containerStyle, lines := m.aboutPanel()
+	bg := m.currentTheme.Background
+	// On a short window, show a slice of the lines and say what's cut.
+	if rows := m.aboutRows(); len(lines) > rows {
+		top := min(m.aboutScroll, len(lines)-rows)
+		window := append([]string(nil), lines[top:top+rows]...)
+		mutedStyle := lipgloss.NewStyle().Foreground(m.currentTheme.Muted).Background(bg)
+		if top > 0 {
+			window[0] = mutedStyle.Render(fmt.Sprintf("↑ %d more", top))
+		}
+		if below := len(lines) - top - rows; below > 0 {
+			window[rows-1] = mutedStyle.Render(fmt.Sprintf("↓ %d more", below))
+		}
+		lines = window
+	}
+	return containerStyle.Render(strings.Join(lines, "\n"))
+}
+
+// aboutPanel is the ? panel's frame and its content lines.
+func (m Model) aboutPanel() (lipgloss.Style, []string) {
 	bg := m.currentTheme.Background
 
 	width := 64
@@ -363,17 +385,42 @@ func (m Model) renderAbout() string {
 		{"t", "select translation"},
 		{"d", "download translations"},
 		{"y", "yank current verse"},
+		{"esc", "clear the verse selection"},
 		{"J / K", "extend the verse selection down / up"},
 		{"S", "save the selected ESV verses offline (again unsaves)"},
 		{"o", "list saved ESV verses"},
 		{"?", "about"},
 		{"q", "quit"},
 	}
+	// Wrap here, not in the frame, so the scroll window counts the
+	// lines that are actually drawn. Descriptions hang under their key.
+	inner := max(width-6, 10) // border 2, padding 2+2
 	for _, s := range shortcuts {
-		content.WriteString(labelStyle.Render(fmt.Sprintf("%-8s", s.key)) + sectionStyle.Render(s.desc) + "\n")
+		desc := strings.Split(ansi.Wordwrap(s.desc, max(inner-8, 10), ""), "\n")
+		content.WriteString(labelStyle.Render(fmt.Sprintf("%-8s", s.key)) + sectionStyle.Render(desc[0]) + "\n")
+		for _, more := range desc[1:] {
+			content.WriteString(sectionStyle.Render(strings.Repeat(" ", 8)+more) + "\n")
+		}
 	}
 
-	return containerStyle.Render(content.String())
+	var lines []string
+	for _, line := range strings.Split(strings.TrimSuffix(content.String(), "\n"), "\n") {
+		lines = append(lines, strings.Split(ansi.Wordwrap(line, inner, ""), "\n")...)
+	}
+	return containerStyle, lines
+}
+
+// aboutRows is how many content lines of the ? panel fit the window: its
+// height less the panel's border and padding (4) and a line of margin
+// above and below.
+func (m Model) aboutRows() int {
+	return max(m.height-6, 5)
+}
+
+// aboutMaxScroll is how far the ? panel can scroll.
+func (m Model) aboutMaxScroll() int {
+	_, lines := m.aboutPanel()
+	return max(len(lines)-m.aboutRows(), 0)
 }
 
 func (m Model) renderWordSearch() string {

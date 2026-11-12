@@ -86,6 +86,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			return m, nil, true
 		}
 	case "up", "k":
+		if m.mode == modeAbout {
+			m.aboutScroll = max(m.aboutScroll-1, 0)
+			return m, nil, true
+		}
 		if m.mode == modeSaved {
 			m.savedSelected = max(m.savedSelected-1, 0)
 			return m, nil, true
@@ -125,6 +129,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			return m, nil, true
 		}
 	case "down", "j":
+		if m.mode == modeAbout {
+			m.aboutScroll = min(m.aboutScroll+1, m.aboutMaxScroll())
+			return m, nil, true
+		}
 		if m.mode == modeSaved {
 			m.savedSelected = min(m.savedSelected+1, max(len(m.savedList)-1, 0))
 			return m, nil, true
@@ -234,6 +242,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 	case "?":
 		if m.mode == modeReader {
 			m.mode = modeAbout
+			m.aboutScroll = 0
 			return m, nil, true
 		}
 	case "s":

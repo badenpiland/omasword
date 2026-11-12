@@ -159,6 +159,9 @@ type Model struct {
 	// configNote says config.json couldn't be read and that the old
 	// file is kept when settings are next saved. It lasts until a key.
 	configNote string
+	// aboutScroll is the first line of the ? panel shown when it is
+	// taller than the window.
+	aboutScroll int
 }
 
 type CacheInterface interface {
