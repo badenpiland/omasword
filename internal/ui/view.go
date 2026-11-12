@@ -158,6 +158,8 @@ func (m Model) renderStatusBar() string {
 			msg = msg[:37] + "..."
 		}
 		right = errStyle.Render("⚠ " + msg)
+	} else if m.configNote != "" {
+		right = lipgloss.NewStyle().Foreground(m.currentTheme.Warning).Background(bg).Render(ansi.Truncate("⚠ "+m.configNote, max(m.width/2, 20), "…"))
 	} else if m.status != "" {
 		right = lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Render(ansi.Truncate("● "+m.status, max(m.width/2, 20), "…"))
 	} else if m.degraded() {

@@ -151,6 +151,9 @@ type Model struct {
 	// status is a short message for the status bar, cleared when you
 	// move to another chapter.
 	status string
+	// configNote says config.json couldn't be read and that the old
+	// file is kept when settings are next saved. It lasts until a key.
+	configNote string
 }
 
 type CacheInterface interface {
@@ -295,6 +298,9 @@ func NewModel() Model {
 		esvKeyInput:            esvKey,
 		esvKeyCmd:              keyCmd,
 		esvKeyChecked:          esvKeyChecked,
+	}
+	if settings.IsUnreadable(err) {
+		m.configNote = "config.json is unreadable; using defaults, old file kept as .bad"
 	}
 	m.esvClient, _ = esv.New(savedKey, esv.DefaultCacheDir())
 	if fellBack {

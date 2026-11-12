@@ -50,7 +50,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// A status message lasts until the next key.
 		if _, press := msg.(tea.KeyPressMsg); press {
-			m.status = ""
+			m.status, m.configNote = "", ""
 		}
 		var handled bool
 		if m, cmd, handled = m.handleKey(msg); handled {
