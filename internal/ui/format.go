@@ -246,6 +246,11 @@ func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, w
 		// Remove HTML tags
 		text := stripHTMLTags(v.Text)
 		verseNumStr := fmt.Sprintf("%d", v.Verse)
+		saved := m.showingESV() && m.savedHere[v.Verse]
+		if saved {
+			// A dot marks a saved verse without relying on color alone.
+			verseNumStr = "•" + verseNumStr
+		}
 
 		// Check if this verse is in the highlighted range
 		isHighlighted := highlightedVerseStart > 0 && v.Verse >= highlightedVerseStart && v.Verse <= highlightedVerseEnd
@@ -290,7 +295,11 @@ func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, w
 				inHighlightedRange = false
 			}
 		} else {
-			verseNum := verseStyle.Render(verseNumStr)
+			numStyle := verseStyle
+			if saved {
+				numStyle = numStyle.Foreground(m.currentTheme.Success)
+			}
+			verseNum := numStyle.Render(verseNumStr)
 
 			// Calculate indent for wrapped lines (verse number width + 2 spaces)
 			indent := 6
@@ -314,7 +323,10 @@ func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, w
 		}
 	}
 
-	if m.selectedTranslation == esv.ID {
+	if m.degraded() {
+		sb.WriteString(m.mutedBlock(m.fallbackNote(), width))
+	}
+	if m.showingESV() {
 		sb.WriteString(m.esvNoticeBlock(width))
 	}
 	return sb.String()
@@ -331,12 +343,20 @@ func (m Model) esvNoticeBlock(width int) string {
 		fmt.Fprintf(&text, "Showing verses %d–%d of %d. Press , or . for another page. …\n", m.esvFirst, m.esvLast, m.esvTotal)
 	}
 	text.WriteString(esv.Attribution(m.displayedESVNotice()))
+	return m.mutedBlock(text.String(), width)
+}
+
+// mutedBlock is a note under the chapter, in muted italics.
+func (m Model) mutedBlock(text string, width int) string {
+	if width < 20 {
+		width = 20
+	}
 	style := lipgloss.NewStyle().
 		Foreground(m.currentTheme.Muted).
 		Background(m.currentTheme.Background).
 		Italic(true).
 		Width(width)
-	return "\n" + style.Render(wrapText(text.String(), width)) + "\n"
+	return "\n" + style.Render(wrapText(text, width)) + "\n"
 }
 
 func wrapText(text string, width int) string {

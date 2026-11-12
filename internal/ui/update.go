@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"errors"
+
 	"omasword/internal/esv"
 	"omasword/internal/settings"
 	"omasword/internal/theme"
@@ -46,6 +48,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// A status message lasts until the next key.
+		if _, press := msg.(tea.KeyPressMsg); press {
+			m.status = ""
+		}
 		var handled bool
 		if m, cmd, handled = m.handleKey(msg); handled {
 			return m, cmd
@@ -287,17 +293,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chapterLoadedMsg:
 		// A successful load means the earlier error no longer applies.
 		m.err = nil
-		m.chapterRetries = 0
 		m.loading = false
+		// Reloading the chapter that the BSB stood in for (the ESV is
+		// back, or still isn't) keeps your place instead of jumping to
+		// the top.
+		reload := m.degraded() && msg.book != 0 && msg.book == m.currentBook && msg.chapter == m.currentChapter
+		keepY := m.viewport.YOffset()
+		if !reload {
+			m.status = ""
+		}
+		m.fallback, m.fallbackErr = msg.fallback, msg.fallbackErr
 		m.currentVerses = msg.verses
 		m.currentParallelVerses = nil
-		if m.selectedTranslation == esv.ID {
+		if m.showingESV() {
 			m.esvFirst, m.esvLast, m.esvTotal = msg.esvFirst, msg.esvLast, msg.esvTotal
 			if msg.esvNotice != "" {
 				m.esvNotice = msg.esvNotice
 			}
 		} else {
 			m.esvFirst, m.esvLast, m.esvTotal = 0, 0, 0
+		}
+		m.refreshSaved()
+		if m.degraded() {
+			// Keep trying the ESV in the background, at the same pace as
+			// a failed chapter.
+			delay := listRetryDelay(m.chapterRetries)
+			var rate *esv.RateError
+			if errors.As(m.fallbackErr, &rate) {
+				delay = max(delay, rate.RetryAfter)
+			}
+			cmds = append(cmds, retryAfter(delay, retryChapterMsg{m.currentBook, m.currentChapter}))
+			m.chapterRetries++
+		} else {
+			m.chapterRetries = 0
 		}
 		// Track if we came from a search (highlighted verse was set)
 		cameFromSearch := m.highlightedVerseStart > 1
@@ -322,7 +350,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// If we came from a search, scroll to the highlighted verse
-		if cameFromSearch {
+		if reload {
+			m.viewport.SetYOffset(keepY)
+		} else if cameFromSearch {
 			m.scrollToHighlightedVerse()
 			m.topVisibleVerse = m.highlightedVerseStart
 		} else {
@@ -441,7 +471,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Back at the top: drop the sticky indicator.
 				m.topVisibleVerse = 0
 			}
-			if newTopVerse != m.highlightedVerseStart {
+			// Scrolling moves a one-verse highlight along, but leaves a
+			// cleared selection (esc) cleared.
+			if m.highlightedVerseStart != 0 && newTopVerse != m.highlightedVerseStart {
 				m.highlightedVerseStart = newTopVerse
 				m.highlightedVerseEnd = newTopVerse
 				m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, m.viewport.Width(), m.highlightedVerseStart, m.highlightedVerseEnd)

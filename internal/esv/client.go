@@ -223,6 +223,42 @@ func (c *Client) Chapter(bookID, chapter, startVerse int) (Passage, error) {
 	return page, nil
 }
 
+// SaveVerses keeps verses of one chapter for offline reading. They must
+// be ESV text you already have (a page from Chapter), so saving makes no
+// request. It returns *SaveLimitError when the caps would be passed.
+func (c *Client) SaveVerses(bookID, chapter int, verses []api.Verse) error {
+	keep := make([]api.Verse, 0, len(verses))
+	for _, v := range verses {
+		v.Book, v.Chapter, v.Translation = bookID, chapter, ID
+		keep = append(keep, v)
+	}
+	c.mu.Lock()
+	notice := c.notice
+	c.mu.Unlock()
+	return c.cache.SaveVerses(bookID, chapter, keep, notice)
+}
+
+// UnsaveVerses removes saved verses from through to; to < 1 removes the
+// whole chapter.
+func (c *Client) UnsaveVerses(bookID, chapter, from, to int) error {
+	return c.cache.UnsaveVerses(bookID, chapter, from, to)
+}
+
+// SavedVerses returns the saved verses of a chapter.
+func (c *Client) SavedVerses(bookID, chapter int) []api.Verse {
+	return c.cache.SavedVerses(bookID, chapter)
+}
+
+// SavedList lists the saved chapters and their verse numbers.
+func (c *Client) SavedList() []SavedChapter {
+	return c.cache.SavedList()
+}
+
+// SavedCount is the number of saved verses.
+func (c *Client) SavedCount() int {
+	return c.cache.SavedCount()
+}
+
 // Search runs a word search and returns at most one legal page of hits.
 // Results are not cached: a search page is easy to over-store, and the
 // chapter cache already covers passages the reader opens.

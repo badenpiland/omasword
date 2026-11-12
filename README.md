@@ -116,6 +116,10 @@ The default translation is the BSB. `--json` prints one JSON object. Exit codes 
 - `c` - Comparison view (side-by-side translations); press `c` again to close it. In comparison, `+` and `-` add or remove a column (2 to 4, default 2); the count is saved
 - `t` - Translation picker (`a` in that picker sets or clears an ESV API key)
 - `,` / `.` - Previous / next ESV page, when a chapter is longer than Crossway's per-page limit
+- `J` / `K` (or shift+↓ / shift+↑) - Extend the verse selection down / up. Click, drag, or shift-click selects verses with the mouse
+- `esc` - Clear the verse selection (`y` then copies the whole chapter)
+- `S` - Save the selected ESV verses to read offline; press again on saved verses to unsave them
+- `o` - List saved ESV verses (`⏎` opens, `x` removes)
 - `d` - Cache manager (`x` deletes a cached translation here)
 - `r` - Return to reader from any overlay
 - `y` - Yank/copy selected verse
@@ -137,6 +141,10 @@ To use your own password manager instead, set `esv_api_key_cmd` in `~/.config/om
 `OMASWORD_ESV_API_KEY` is only for one process, such as CI or a single command. omasword never writes it anywhere. Do not put it in a shell startup file; that would keep the key in plain text. Use the keyring or `esv_api_key_cmd` for anything that should stick around.
 
 ESV text is fetched from Crossway as you read. omasword stores at most 500 verses, and at most half of any book, and shows the same limit on one screen. A longer passage (Obadiah, for example) is split across pages with `,` and `.`. The Crossway copyright notice and a link to [esv.org](https://www.esv.org/) appear wherever ESV text is shown, including copied verses. Requests stay inside Crossway's rate limits: 60 per minute, 1,000 per hour, and 5,000 per day.
+
+To read ESV text offline, select the verses you want and press `S`. Saved verses get a dot by the verse number, and `o` lists them all. Press `S` again on saved verses, or `x` in the list, to remove them. Saved verses count toward the limits above, 500 in total and less than half of any book, and omasword tells you when a save would pass them. Saved verses are kept until you remove them. Recently read chapters are also kept to save requests, but only in the room your saved verses leave.
+
+When you are offline or over the rate limit, an ESV chapter you open shows the verses you saved from it. If you saved none, omasword shows the BSB for that chapter instead, labeled in the header and under the text. Either way, it switches back to the full ESV once the chapter loads. Download the BSB with `d` so this works without a connection.
 
 ## API
 

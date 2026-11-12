@@ -2,8 +2,10 @@ package esv
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -23,11 +25,16 @@ type entry struct {
 type cacheFile struct {
 	Notice  string  `json:"notice,omitempty"`
 	Entries []entry `json:"entries"`
+	// Saved holds the verses you chose to keep, one entry per chapter
+	// with its verses in order (not necessarily contiguous).
+	Saved []entry `json:"saved,omitempty"`
 }
 
-// VerseCache stores ESV pages under Crossway's cap: at most 500 verses in
+// VerseCache stores ESV text under Crossway's cap: at most 500 verses in
 // total, and at most half of any one book, whichever limit binds first.
-// Puts that would pass a limit evict the least recently used pages.
+// Saved verses (SaveVerses) and recently read pages (Put) share those
+// caps. Saved verses are kept until you remove them; reading only uses
+// the room they leave, and evicts its least recently used pages past it.
 type VerseCache struct {
 	mu   sync.Mutex
 	path string
@@ -115,11 +122,172 @@ func (c *VerseCache) Put(book, chapter, total int, verses []api.Verse, notice st
 	return c.save()
 }
 
-// VerseCount is the number of verses currently stored.
+// VerseCount is the number of verses currently stored, saved and read.
 func (c *VerseCache) VerseCount() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return countVerses(c.file.Entries)
+	return countVerses(c.all())
+}
+
+func (c *VerseCache) all() []entry {
+	return append(append([]entry(nil), c.file.Saved...), c.file.Entries...)
+}
+
+// SaveLimitError is returned when saving would pass a cap. Book is set
+// when the half-book cap is the one in the way.
+type SaveLimitError struct {
+	Book         int
+	Limit, Saved int
+}
+
+func (e *SaveLimitError) Error() string {
+	if e.Book == 0 {
+		return fmt.Sprintf("can't save: Crossway allows %d saved ESV verses and %d are saved", e.Limit, e.Saved)
+	}
+	name, _ := BookName(e.Book)
+	return fmt.Sprintf("can't save: Crossway allows %d verses of %s (under half) and %d are saved", e.Limit, name, e.Saved)
+}
+
+// SaveVerses adds verses of one chapter to what you have saved. Verses
+// already saved are not counted twice. It fails with *SaveLimitError,
+// saving nothing, when the saved verses would pass 500 or half the book.
+// Read pages are evicted to make room.
+func (c *VerseCache) SaveVerses(book, chapter int, verses []api.Verse, notice string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(verses) == 0 {
+		return nil
+	}
+	i := c.savedIndex(book, chapter)
+	var have []api.Verse
+	if i >= 0 {
+		have = c.file.Saved[i].Verses
+	}
+	merged := mergeVerses(have, verses)
+	added := len(merged) - len(have)
+	if added == 0 {
+		return nil
+	}
+	total, inBook := 0, 0
+	for _, e := range c.file.Saved {
+		total += len(e.Verses)
+		if e.Book == book {
+			inBook += len(e.Verses)
+		}
+	}
+	if limit := MaxVerses(book); inBook+added > limit {
+		return &SaveLimitError{Book: book, Limit: limit, Saved: inBook}
+	}
+	if total+added > MaxStoredVerses {
+		return &SaveLimitError{Limit: MaxStoredVerses, Saved: total}
+	}
+	if i >= 0 {
+		c.file.Saved[i].Verses = merged
+		c.file.Saved[i].Used = c.now().UnixNano()
+	} else {
+		c.file.Saved = append(c.file.Saved, entry{
+			Book: book, Chapter: chapter, Used: c.now().UnixNano(), Verses: merged,
+		})
+	}
+	if notice != "" {
+		c.file.Notice = notice
+	}
+	c.evict()
+	return c.save()
+}
+
+// UnsaveVerses removes saved verses from through to of a chapter. to < 1
+// removes the whole chapter.
+func (c *VerseCache) UnsaveVerses(book, chapter, from, to int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	i := c.savedIndex(book, chapter)
+	if i < 0 {
+		return nil
+	}
+	kept := c.file.Saved[i].Verses[:0]
+	for _, v := range c.file.Saved[i].Verses {
+		if to >= 1 && (v.Verse < from || v.Verse > to) {
+			kept = append(kept, v)
+		}
+	}
+	if len(kept) == 0 {
+		c.file.Saved = append(c.file.Saved[:i], c.file.Saved[i+1:]...)
+	} else {
+		c.file.Saved[i].Verses = kept
+	}
+	return c.save()
+}
+
+// SavedVerses returns the saved verses of one chapter, in order.
+func (c *VerseCache) SavedVerses(book, chapter int) []api.Verse {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if i := c.savedIndex(book, chapter); i >= 0 {
+		return append([]api.Verse(nil), c.file.Saved[i].Verses...)
+	}
+	return nil
+}
+
+// SavedChapter is one chapter's saved verse numbers.
+type SavedChapter struct {
+	Book, Chapter int
+	Verses        []int
+}
+
+// SavedList lists what is saved, in canonical order.
+func (c *VerseCache) SavedList() []SavedChapter {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]SavedChapter, 0, len(c.file.Saved))
+	for _, e := range c.file.Saved {
+		sc := SavedChapter{Book: e.Book, Chapter: e.Chapter}
+		for _, v := range e.Verses {
+			sc.Verses = append(sc.Verses, v.Verse)
+		}
+		out = append(out, sc)
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].Book != out[b].Book {
+			return out[a].Book < out[b].Book
+		}
+		return out[a].Chapter < out[b].Chapter
+	})
+	return out
+}
+
+// SavedCount is the number of saved verses.
+func (c *VerseCache) SavedCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return countVerses(c.file.Saved)
+}
+
+func (c *VerseCache) savedIndex(book, chapter int) int {
+	for i, e := range c.file.Saved {
+		if e.Book == book && e.Chapter == chapter {
+			return i
+		}
+	}
+	return -1
+}
+
+// mergeVerses is the union of a and b by verse number, sorted. A verse in
+// both keeps b's text.
+func mergeVerses(a, b []api.Verse) []api.Verse {
+	byNum := map[int]api.Verse{}
+	for _, v := range a {
+		byNum[v.Verse] = v
+	}
+	for _, v := range b {
+		byNum[v.Verse] = v
+	}
+	out := make([]api.Verse, 0, len(byNum))
+	for _, v := range byNum {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Verse < out[j].Verse })
+	return out
 }
 
 func trimPage(book int, verses []api.Verse) []api.Verse {
@@ -133,14 +301,16 @@ func trimPage(book int, verses []api.Verse) []api.Verse {
 	return verses
 }
 
-// evict drops the least recently used pages until both caps hold. A book
+// evict drops the least recently used read pages until both caps hold
+// for saved and read verses together. Saved verses are never evicted;
+// SaveVerses keeps them within the caps on their own. A book
 // that is over its own half-book cap loses its oldest page first, so
 // paging inside Obadiah does not flush an unrelated book. A single page
 // that is itself over a cap is trimmed. Reports whether anything changed.
 func (c *VerseCache) evict() bool {
 	changed := false
 	for {
-		if len(c.file.Entries) == 1 {
+		if len(c.file.Entries) == 1 && len(c.file.Saved) == 0 {
 			e := &c.file.Entries[0]
 			limit := MaxVerses(e.Book)
 			if len(e.Verses) > limit {
@@ -153,8 +323,8 @@ func (c *VerseCache) evict() bool {
 			}
 			return changed
 		}
-		book, bookOver := overBook(c.file.Entries)
-		totalOver := countVerses(c.file.Entries) > MaxStoredVerses
+		book, bookOver := overBook(c.all())
+		totalOver := countVerses(c.all()) > MaxStoredVerses
 		if !bookOver && !totalOver {
 			return changed
 		}

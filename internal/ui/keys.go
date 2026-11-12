@@ -86,6 +86,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			return m, nil, true
 		}
 	case "up", "k":
+		if m.mode == modeSaved {
+			m.savedSelected = max(m.savedSelected-1, 0)
+			return m, nil, true
+		}
 		if m.mode == modeWordSearch && m.wordSearchResults != nil && m.wordSearchSelected > 0 {
 			m.wordSearchSelected--
 			return m, nil, true
@@ -99,6 +103,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.sidebarSelected--
 			return m, nil, true
 		} else if m.mode == modeReader && m.currentVerses != nil {
+			// With nothing selected, start at the top visible verse.
+			if m.highlightedVerseStart == 0 {
+				return m.selectTopVerse(), nil, true
+			}
 			// Navigate to previous verse
 			currentIdx := -1
 			for i, v := range m.currentVerses {
@@ -117,6 +125,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			return m, nil, true
 		}
 	case "down", "j":
+		if m.mode == modeSaved {
+			m.savedSelected = min(m.savedSelected+1, max(len(m.savedList)-1, 0))
+			return m, nil, true
+		}
 		if m.mode == modeWordSearch && m.wordSearchResults != nil && m.wordSearchSelected < len(m.wordSearchResults)-1 {
 			m.wordSearchSelected++
 			return m, nil, true
@@ -130,6 +142,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.sidebarSelected++
 			return m, nil, true
 		} else if m.mode == modeReader && m.currentVerses != nil {
+			if m.highlightedVerseStart == 0 {
+				return m.selectTopVerse(), nil, true
+			}
 			// Navigate to next verse
 			currentIdx := -1
 			for i, v := range m.currentVerses {
@@ -247,9 +262,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			// If verses are highlighted, only copy those
 			if m.highlightedVerseStart > 0 {
 				if m.highlightedVerseStart == m.highlightedVerseEnd {
-					textToCopy.WriteString(fmt.Sprintf("%s %s %d:%d\n\n", m.selectedTranslation, m.currentBookName, m.currentChapter, m.highlightedVerseStart))
+					textToCopy.WriteString(fmt.Sprintf("%s %s %d:%d\n\n", m.readerTranslation(), m.currentBookName, m.currentChapter, m.highlightedVerseStart))
 				} else {
-					textToCopy.WriteString(fmt.Sprintf("%s %s %d:%d-%d\n\n", m.selectedTranslation, m.currentBookName, m.currentChapter, m.highlightedVerseStart, m.highlightedVerseEnd))
+					textToCopy.WriteString(fmt.Sprintf("%s %s %d:%d-%d\n\n", m.readerTranslation(), m.currentBookName, m.currentChapter, m.highlightedVerseStart, m.highlightedVerseEnd))
 				}
 
 				for _, v := range m.currentVerses {
@@ -260,7 +275,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				}
 			} else {
 				// Copy entire chapter
-				textToCopy.WriteString(fmt.Sprintf("%s %s %d\n\n", m.selectedTranslation, m.currentBookName, m.currentChapter))
+				textToCopy.WriteString(fmt.Sprintf("%s %s %d\n\n", m.readerTranslation(), m.currentBookName, m.currentChapter))
 
 				for _, v := range m.currentVerses {
 					text := stripHTMLTags(v.Text)
@@ -268,7 +283,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				}
 			}
 
-			if m.selectedTranslation == esv.ID {
+			if m.showingESV() {
 				textToCopy.WriteString("\n")
 				textToCopy.WriteString(esv.Attribution(m.displayedESVNotice()))
 				textToCopy.WriteString("\n")
@@ -276,6 +291,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			clipboard.WriteAll(textToCopy.String())
 		}
 	case "enter":
+		if m.mode == modeSaved {
+			m, cmd := m.openSavedSelected()
+			return m, cmd, true
+		}
 		if m.mode == modeESVKey {
 			m, cmd := m.commitESVKey()
 			return m, cmd, true
@@ -405,7 +424,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				m.loadReadingChapter(m.currentBook, m.currentChapter),
 			), true
 		}
-	case "x":
+	case "x", "delete":
+		if m.mode == modeSaved {
+			return m.removeSavedSelected(), nil, true
+		}
 		// Delete cached translation
 		if m.mode == modeCacheManager && m.translations != nil && m.cacheSelected < len(m.translations) {
 			translation := m.translations[m.cacheSelected].ShortName
@@ -427,15 +449,35 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.err = nil
 			return m, nil, true
 		}
+	case "S":
+		if m.mode == modeReader {
+			return m.toggleSave(), nil, true
+		}
+	case "J", "shift+down":
+		if m.mode == modeReader {
+			return m.extendSelection(1), nil, true
+		}
+	case "K", "shift+up":
+		if m.mode == modeReader {
+			return m.extendSelection(-1), nil, true
+		}
+	case "o":
+		if m.mode == modeReader {
+			return m.openSavedList(), nil, true
+		}
+		if m.mode == modeSaved {
+			m.mode = modeReader
+			return m, nil, true
+		}
 	case ",":
-		if m.mode == modeReader && m.selectedTranslation == esv.ID && m.esvFirst > 1 {
+		if m.mode == modeReader && m.showingESV() && m.esvFirst > 1 {
 			m.esvPageBook, m.esvPageChapter = m.currentBook, m.currentChapter
 			m.esvPageStart = esv.PageStart(m.currentBook, m.esvFirst-1)
 			m.loading = true
 			return m, m.loadReadingChapter(m.currentBook, m.currentChapter), true
 		}
 	case ".":
-		if m.mode == modeReader && m.selectedTranslation == esv.ID && m.esvTotal > m.esvLast && m.esvLast > 0 {
+		if m.mode == modeReader && m.showingESV() && m.esvTotal > m.esvLast && m.esvLast > 0 {
 			m.esvPageBook, m.esvPageChapter = m.currentBook, m.currentChapter
 			m.esvPageStart = m.esvLast + 1
 			m.loading = true
@@ -463,7 +505,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.mode = modeTranslationSelect
 			return m, nil, true
 		}
-		if m.mode == modeCacheManager {
+		if m.mode == modeCacheManager || m.mode == modeSaved {
 			m.mode = modeReader
 			return m, nil, true
 		}
@@ -484,6 +526,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 		if m.focus == paneBooks {
 			m.focus = paneContent
 			return m, nil, true
+		}
+		if m.mode == modeReader && m.highlightedVerseStart > 0 {
+			return m.clearSelection(), nil, true
 		}
 	}
 	return m, nil, false

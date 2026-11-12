@@ -346,7 +346,7 @@ func (m Model) renderAbout() string {
 	content.WriteString(labelStyle.Render("Texts:   ") + valueStyle.Render("public domain, BSB default") + "\n")
 	esvLine := "add a key from api.esv.org"
 	if m.esvClient != nil && m.esvClient.HasKey() {
-		esvLine = "key set, online only"
+		esvLine = fmt.Sprintf("key set · %d/%d verses saved", m.esvClient.SavedCount(), esv.MaxStoredVerses)
 	}
 	content.WriteString(labelStyle.Render("ESV:     ") + valueStyle.Render(esvLine) + "\n")
 	content.WriteString(labelStyle.Render("License: ") + valueStyle.Render("GPL-2.0-or-later") + "\n\n")
@@ -363,6 +363,9 @@ func (m Model) renderAbout() string {
 		{"t", "select translation"},
 		{"d", "download translations"},
 		{"y", "yank current verse"},
+		{"J / K", "extend the verse selection down / up"},
+		{"S", "save the selected ESV verses offline (again unsaves)"},
+		{"o", "list saved ESV verses"},
 		{"?", "about"},
 		{"q", "quit"},
 	}
