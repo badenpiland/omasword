@@ -46,7 +46,7 @@ func (m Model) viewportSize() (int, int) {
 func (m Model) overlayActive() bool {
 	switch m.mode {
 	case modeSearch, modeTranslationSelect,
-		modeCacheManager, modeAbout, modeWordSearch, modePicker, modeESVKey:
+		modeCacheManager, modeAbout, modeWordSearch, modePicker, modeESVKey, modeSaved:
 		return true
 	}
 	return false
@@ -160,12 +160,10 @@ func (m Model) renderStatusBar() string {
 		right = errStyle.Render("⚠ " + msg)
 	} else if m.status != "" {
 		right = lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Render(ansi.Truncate("● "+m.status, max(m.width/2, 20), "…"))
-	} else if m.fallback != "" {
+	} else if m.degraded() {
 		right = lipgloss.NewStyle().Foreground(m.currentTheme.Warning).Background(bg).Render("● " + m.fallbackStatus())
-	} else if m.showingESV() && m.esvPinned {
-		right = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render("● pinned")
-	} else if m.showingESV() && m.esvSaved {
-		right = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render("● saved")
+	} else if m.showingESV() && len(m.savedHere) > 0 {
+		right = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render(fmt.Sprintf("● %d saved here", len(m.savedHere)))
 	} else if m.cache != nil && m.cache.IsCached(m.selectedTranslation) {
 		right = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render("● offline")
 	} else {
@@ -207,6 +205,8 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 		hs = []hint{{"↑↓", "navigate"}, {"⏎", "download"}, {"x", "delete"}, {"esc", "close"}}
 	case modeAbout:
 		hs = []hint{{"esc", "close"}}
+	case modeSaved:
+		hs = []hint{{"↑↓", "navigate"}, {"⏎", "open"}, {"x", "remove"}, {"esc", "close"}}
 	case modeWordSearch:
 		if m.wordSearchResults != nil {
 			hs = []hint{{"↑↓", "navigate"}, {"⏎", "go to verse"}, {"esc", "close"}}
@@ -235,7 +235,7 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 			{"q", "quit"},
 		}
 		if m.selectedTranslation == esv.ID {
-			hs = append(hs[:6], append([]hint{{"S", "save ahead"}, {"P", "pin"}}, hs[6:]...)...)
+			hs = append(hs[:6], append([]hint{{"S", "save"}, {"o", "saved"}}, hs[6:]...)...)
 		}
 	}
 
@@ -576,6 +576,8 @@ func (m Model) renderOverlayPanel() string {
 		return m.renderPicker()
 	case modeESVKey:
 		return m.renderESVKey()
+	case modeSaved:
+		return m.renderSaved()
 	}
 	return ""
 }

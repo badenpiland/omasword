@@ -25,6 +25,7 @@ const (
 	modeWordSearch
 	modePicker // "v": Books → Chapters → Verses browser
 	modeESVKey // paste or remove a Crossway ESV API key
+	modeSaved  // "o": the ESV verses saved for offline reading
 )
 
 type focusPane int
@@ -137,11 +138,14 @@ type Model struct {
 	esvNotice        string
 	esvKeyInput      textinput.Model
 	esvKeyThenSelect bool
-	// esvSaved and esvPinned describe the ESV page on screen.
-	esvSaved, esvPinned bool
-	savingAhead         bool
-	// fallback names the translation shown in place of an ESV chapter
-	// that couldn't be loaded (the BSB), and fallbackErr why.
+	// savedHere marks the saved verses of the chapter on screen.
+	savedHere map[int]bool
+	// The saved-verses list ("o") and its cursor.
+	savedList     []esv.SavedChapter
+	savedSelected int
+	// fallbackErr is set while an ESV chapter couldn't be loaded and the
+	// pane shows a stand-in: the translation named by fallback (the BSB),
+	// or, when fallback is empty, the verses you saved from it.
 	fallback    string
 	fallbackErr error
 	// status is a short message for the status bar, cleared when you
@@ -171,11 +175,11 @@ type (
 		verses                      []api.Verse
 		esvFirst, esvLast, esvTotal int
 		esvNotice                   string
-		esvSaved, esvPinned         bool
 		// book and chapter are set for ESV loads, including stand-ins.
 		book, chapter int
-		// fallback is set when verses are from this translation in place
-		// of an ESV chapter that failed with fallbackErr.
+		// fallbackErr is set when the ESV chapter failed and verses are a
+		// stand-in: from the fallback translation, or your saved verses
+		// when fallback is empty.
 		fallback    string
 		fallbackErr error
 	}

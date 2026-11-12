@@ -26,12 +26,14 @@ except as this section allows.
 - ESV is online-only. Do not bulk-download it. Any local cache stays
   within 500 verses and half of any one book, whichever is less, and
   evicts past that. One screen, including this CLI, shows no more than
-  that. A clipped passage is marked with an ellipsis. Save ahead (`S`)
-  and pins (`P`) only fill that same cache: pins are exempt from
-  eviction but count toward both caps, and save ahead fetches one
-  chapter at a time and stops before a cap or `esv.MaxSaveAhead`.
+  that. A clipped passage is marked with an ellipsis. Verses saved with
+  `S` share that cache and its caps: they are never evicted, and a save
+  that would pass a cap is refused, while recently read pages only use
+  the room left over. Saving stores text already on screen and makes no
+  request; do not add bulk or ahead-of-reading fetches.
 - When ESV is selected but a chapter can't be loaded (offline, rate
-  limited), the reader shows the BSB in its place. Label it as the BSB
+  limited), the reader shows the verses saved from it, or else the BSB
+  in its place. Label it as the BSB
   everywhere (header, status bar, copied text), and don't attach the
   Crossway notice or ESV paging to it.
 - Wherever ESV text is shown (the reader, a copy, search results, and

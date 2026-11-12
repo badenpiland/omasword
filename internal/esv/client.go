@@ -38,9 +38,6 @@ type Passage struct {
 	Notice      string
 	MoreBefore  bool
 	MoreAfter   bool
-	// Saved is true when this page is in the local cache and so can be
-	// read offline; Pinned when it is kept from eviction as well.
-	Saved, Pinned bool
 }
 
 // Client fetches ESV text from api.esv.org. It never bulk-downloads a
@@ -200,8 +197,6 @@ func (c *Client) Chapter(bookID, chapter, startVerse int) (Passage, error) {
 		c.setNotice(notice)
 		p := pageFrom(verses, total)
 		p.Notice = c.Notice()
-		_, p.Pinned = c.cache.Has(bookID, chapter, startVerse)
-		p.Saved = true
 		return p, nil
 	}
 	all, notice, err := c.fetchChapter(bookID, chapter)
@@ -225,106 +220,43 @@ func (c *Client) Chapter(bookID, chapter, startVerse int) (Passage, error) {
 	if err := c.cache.Put(bookID, chapter, len(all), page.Verses, notice); err != nil {
 		return Passage{}, err
 	}
-	// With the caps full of pinned pages, Put may not keep this one.
-	page.Saved, page.Pinned = c.cache.Has(bookID, chapter, page.First)
 	return page, nil
 }
 
-// SetPinned pins or unpins the stored pages of a chapter. found is false
-// when none of the chapter is stored.
-func (c *Client) SetPinned(bookID, chapter int, pinned bool) (found bool, err error) {
-	return c.cache.SetPinned(bookID, chapter, pinned)
+// SaveVerses keeps verses of one chapter for offline reading. They must
+// be ESV text you already have (a page from Chapter), so saving makes no
+// request. It returns *SaveLimitError when the caps would be passed.
+func (c *Client) SaveVerses(bookID, chapter int, verses []api.Verse) error {
+	keep := make([]api.Verse, 0, len(verses))
+	for _, v := range verses {
+		v.Book, v.Chapter, v.Translation = bookID, chapter, ID
+		keep = append(keep, v)
+	}
+	c.mu.Lock()
+	notice := c.notice
+	c.mu.Unlock()
+	return c.cache.SaveVerses(bookID, chapter, keep, notice)
 }
 
-// Stats reports what the verse cache holds.
-func (c *Client) Stats() Stats {
-	return c.cache.Stats()
+// UnsaveVerses removes saved verses from through to; to < 1 removes the
+// whole chapter.
+func (c *Client) UnsaveVerses(bookID, chapter, from, to int) error {
+	return c.cache.UnsaveVerses(bookID, chapter, from, to)
 }
 
-// MaxSaveAhead bounds one save-ahead run. It leaves most of a minute's
-// requests under Crossway's 60-per-minute limit for reading.
-const MaxSaveAhead = 40
-
-// SaveResult says how far a save-ahead run got. Through is the last
-// chapter that is now stored, or zero when none was. Full is true when it
-// stopped because the next chapter would not fit under the caps, and
-// BookLimit when the cap that stopped it was the half-book one for
-// FullBook rather than the 500-verse total.
-type SaveResult struct {
-	Fetched, AlreadySaved int
-	ThroughBook           int
-	ThroughChapter        int
-	Full, BookLimit       bool
-	FullBook              int
+// SavedVerses returns the saved verses of a chapter.
+func (c *Client) SavedVerses(bookID, chapter int) []api.Verse {
+	return c.cache.SavedVerses(bookID, chapter)
 }
 
-// SaveAhead stores the chapters after book:chapter, in reading order,
-// for offline reading. It only uses room that pinned pages, the chapter
-// you are on, and chapters saved in this run do not hold, so older pages
-// are evicted to make space but nothing it saved is. Only the first page
-// of a long chapter is saved. It stops at the end of Revelation, after
-// MaxSaveAhead chapters, at the first chapter that would not fit, or on
-// the first error, which it returns with the progress made so far.
-func (c *Client) SaveAhead(bookID, chapter int) (SaveResult, error) {
-	var res SaveResult
-	if !c.HasKey() {
-		return res, ErrNoKey
-	}
-	since := c.now()
-	c.cache.Touch(bookID, chapter)
-	for range MaxSaveAhead {
-		var ok bool
-		bookID, chapter, ok = nextChapter(bookID, chapter)
-		if !ok {
-			return res, nil
-		}
-		if stored, _ := c.cache.Has(bookID, chapter, 1); stored {
-			c.cache.Touch(bookID, chapter)
-			res.AlreadySaved++
-			res.ThroughBook, res.ThroughChapter = bookID, chapter
-			continue
-		}
-		room, bookBound := c.cache.Room(bookID, since)
-		if room == 0 {
-			res.Full, res.BookLimit, res.FullBook = true, bookBound, bookID
-			return res, nil
-		}
-		all, notice, err := c.fetchChapter(bookID, chapter)
-		if err != nil {
-			return res, err
-		}
-		c.setNotice(notice)
-		if !coversChapter(bookID, all) {
-			return res, fmt.Errorf("ESV returned part of %d:%d", bookID, chapter)
-		}
-		page := clipPage(all, 1, MaxVerses(bookID))
-		if len(page.Verses) > room {
-			res.Full, res.BookLimit, res.FullBook = true, bookBound, bookID
-			return res, nil
-		}
-		for i := range page.Verses {
-			page.Verses[i].Book = bookID
-			page.Verses[i].Chapter = chapter
-			page.Verses[i].Translation = ID
-		}
-		if err := c.cache.Put(bookID, chapter, len(all), page.Verses, notice); err != nil {
-			return res, err
-		}
-		res.Fetched++
-		res.ThroughBook, res.ThroughChapter = bookID, chapter
-	}
-	return res, nil
+// SavedList lists the saved chapters and their verse numbers.
+func (c *Client) SavedList() []SavedChapter {
+	return c.cache.SavedList()
 }
 
-// nextChapter is the chapter after book:chapter in canonical order.
-func nextChapter(bookID, chapter int) (int, int, bool) {
-	if chapter < chapterCount(bookID) {
-		return bookID, chapter + 1, true
-	}
-	if bookID >= len(canon) {
-		return 0, 0, false
-	}
-	return bookID + 1, 1, true
+// SavedCount is the number of saved verses.
+func (c *Client) SavedCount() int {
+	return c.cache.SavedCount()
 }
 
 // Search runs a word search and returns at most one legal page of hits.

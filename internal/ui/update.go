@@ -48,6 +48,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// A status message lasts until the next key.
+		if _, press := msg.(tea.KeyPressMsg); press {
+			m.status = ""
+		}
 		var handled bool
 		if m, cmd, handled = m.handleKey(msg); handled {
 			return m, cmd
@@ -266,10 +270,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd, _ := m.handleListLoad(msg)
 		cmds = append(cmds, cmd)
 
-	case saveAheadDoneMsg:
-		m.savingAhead = false
-		m.status = saveAheadStatus(msg.res, msg.err)
-
 	case esvKeyResolvedMsg:
 		if msg.key != "" && m.esvClient != nil && !m.esvClient.HasKey() {
 			m.esvClient.SetKey(msg.key)
@@ -297,7 +297,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reloading the chapter that the BSB stood in for (the ESV is
 		// back, or still isn't) keeps your place instead of jumping to
 		// the top.
-		reload := m.fallback != "" && msg.book != 0 && msg.book == m.currentBook && msg.chapter == m.currentChapter
+		reload := m.degraded() && msg.book != 0 && msg.book == m.currentBook && msg.chapter == m.currentChapter
 		keepY := m.viewport.YOffset()
 		if !reload {
 			m.status = ""
@@ -307,15 +307,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentParallelVerses = nil
 		if m.showingESV() {
 			m.esvFirst, m.esvLast, m.esvTotal = msg.esvFirst, msg.esvLast, msg.esvTotal
-			m.esvSaved, m.esvPinned = msg.esvSaved, msg.esvPinned
 			if msg.esvNotice != "" {
 				m.esvNotice = msg.esvNotice
 			}
 		} else {
 			m.esvFirst, m.esvLast, m.esvTotal = 0, 0, 0
-			m.esvSaved, m.esvPinned = false, false
 		}
-		if m.fallback != "" {
+		m.refreshSaved()
+		if m.degraded() {
 			// Keep trying the ESV in the background, at the same pace as
 			// a failed chapter.
 			delay := listRetryDelay(m.chapterRetries)

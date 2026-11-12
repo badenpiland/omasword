@@ -86,6 +86,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			return m, nil, true
 		}
 	case "up", "k":
+		if m.mode == modeSaved {
+			m.savedSelected = max(m.savedSelected-1, 0)
+			return m, nil, true
+		}
 		if m.mode == modeWordSearch && m.wordSearchResults != nil && m.wordSearchSelected > 0 {
 			m.wordSearchSelected--
 			return m, nil, true
@@ -117,6 +121,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			return m, nil, true
 		}
 	case "down", "j":
+		if m.mode == modeSaved {
+			m.savedSelected = min(m.savedSelected+1, max(len(m.savedList)-1, 0))
+			return m, nil, true
+		}
 		if m.mode == modeWordSearch && m.wordSearchResults != nil && m.wordSearchSelected < len(m.wordSearchResults)-1 {
 			m.wordSearchSelected++
 			return m, nil, true
@@ -276,6 +284,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			clipboard.WriteAll(textToCopy.String())
 		}
 	case "enter":
+		if m.mode == modeSaved {
+			m, cmd := m.openSavedSelected()
+			return m, cmd, true
+		}
 		if m.mode == modeESVKey {
 			m, cmd := m.commitESVKey()
 			return m, cmd, true
@@ -405,7 +417,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				m.loadReadingChapter(m.currentBook, m.currentChapter),
 			), true
 		}
-	case "x":
+	case "x", "delete":
+		if m.mode == modeSaved {
+			return m.removeSavedSelected(), nil, true
+		}
 		// Delete cached translation
 		if m.mode == modeCacheManager && m.translations != nil && m.cacheSelected < len(m.translations) {
 			translation := m.translations[m.cacheSelected].ShortName
@@ -427,14 +442,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.err = nil
 			return m, nil, true
 		}
-	case "P":
-		if m.mode == modeReader {
-			return m.togglePin(), nil, true
-		}
 	case "S":
 		if m.mode == modeReader {
-			m, cmd := m.saveAhead()
-			return m, cmd, true
+			return m.toggleSave(), nil, true
+		}
+	case "J", "shift+down":
+		if m.mode == modeReader {
+			return m.extendSelection(1), nil, true
+		}
+	case "K", "shift+up":
+		if m.mode == modeReader {
+			return m.extendSelection(-1), nil, true
+		}
+	case "o":
+		if m.mode == modeReader {
+			return m.openSavedList(), nil, true
+		}
+		if m.mode == modeSaved {
+			m.mode = modeReader
+			return m, nil, true
 		}
 	case ",":
 		if m.mode == modeReader && m.showingESV() && m.esvFirst > 1 {
@@ -472,7 +498,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.mode = modeTranslationSelect
 			return m, nil, true
 		}
-		if m.mode == modeCacheManager {
+		if m.mode == modeCacheManager || m.mode == modeSaved {
 			m.mode = modeReader
 			return m, nil, true
 		}

@@ -246,6 +246,11 @@ func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, w
 		// Remove HTML tags
 		text := stripHTMLTags(v.Text)
 		verseNumStr := fmt.Sprintf("%d", v.Verse)
+		saved := m.showingESV() && m.savedHere[v.Verse]
+		if saved {
+			// A dot marks a saved verse without relying on color alone.
+			verseNumStr = "•" + verseNumStr
+		}
 
 		// Check if this verse is in the highlighted range
 		isHighlighted := highlightedVerseStart > 0 && v.Verse >= highlightedVerseStart && v.Verse <= highlightedVerseEnd
@@ -290,7 +295,11 @@ func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, w
 				inHighlightedRange = false
 			}
 		} else {
-			verseNum := verseStyle.Render(verseNumStr)
+			numStyle := verseStyle
+			if saved {
+				numStyle = numStyle.Foreground(m.currentTheme.Success)
+			}
+			verseNum := numStyle.Render(verseNumStr)
 
 			// Calculate indent for wrapped lines (verse number width + 2 spaces)
 			indent := 6
@@ -314,11 +323,11 @@ func (m Model) formatChapter(verses []api.Verse, bookName string, chapter int, w
 		}
 	}
 
-	switch {
-	case m.showingESV():
-		sb.WriteString(m.esvNoticeBlock(width))
-	case m.fallback != "":
+	if m.degraded() {
 		sb.WriteString(m.mutedBlock(m.fallbackNote(), width))
+	}
+	if m.showingESV() {
+		sb.WriteString(m.esvNoticeBlock(width))
 	}
 	return sb.String()
 }
