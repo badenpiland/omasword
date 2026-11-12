@@ -100,7 +100,8 @@ go test ./...
 - `internal/esv`: Crossway's passage API. Verse cache and rate-limit
   journal live under `~/.cache/omasword` and do not contain the key.
 - `internal/settings`: `~/.config/omasword/config.json` (translation,
-  book, chapter, comparison column count, optional `esv_api_key_cmd`),
+  book, chapter, comparison column count, optional `esv_api_key_cmd`,
+  optional `update_check`),
   written atomically. The API key is not in this file. Migrates a
   sword-tui config on first run.
 - `internal/update`: `omasword update`. Reads GitHub's latest release,
@@ -169,4 +170,12 @@ omasword update --check   # only report
 | 4 | `--check` only: a newer release is available |
 | 5 | Could not install: binary's folder not writable, binary under `/usr/`, no build for this OS or CPU, or the download failed checksum or archive checks |
 
-The reader makes no network call to check for updates.
+The reader checks for a newer release in the background through
+`update.Notice`, at most once every 24 hours. Failed checks count
+toward that limit. The time of the last check and the newest tag seen
+are kept in `~/.cache/omasword/update-check.json`, and nothing else is
+stored. A newer tag shows in the status bar. The check is off when
+config.json has `"update_check": false` or when
+`OMASWORD_NO_UPDATE_CHECK` is set to anything other than `0`, and it
+is skipped for binaries under `/usr/`. It must never block startup or
+show an error. ui tests stub `findUpdate`.
