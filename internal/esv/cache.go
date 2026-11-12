@@ -17,6 +17,7 @@ type entry struct {
 	Chapter int         `json:"chapter"`
 	Total   int         `json:"total"`
 	Used    int64       `json:"used"`
+	Pinned  bool        `json:"pinned,omitempty"`
 	Verses  []api.Verse `json:"verses"`
 }
 
@@ -27,7 +28,8 @@ type cacheFile struct {
 
 // VerseCache stores ESV pages under Crossway's cap: at most 500 verses in
 // total, and at most half of any one book, whichever limit binds first.
-// Puts that would pass a limit evict the least recently used pages.
+// Puts that would pass a limit evict the least recently used pages that
+// are not pinned. Pinned pages still count toward both caps.
 type VerseCache struct {
 	mu   sync.Mutex
 	path string
@@ -98,15 +100,19 @@ func (c *VerseCache) Put(book, chapter, total int, verses []api.Verse, notice st
 	fresh := make([]api.Verse, len(verses))
 	copy(fresh, verses)
 	start := fresh[0].Verse
+	pinned := false
 	kept := c.file.Entries[:0]
 	for _, e := range c.file.Entries {
 		if e.Book == book && e.Chapter == chapter && len(e.Verses) > 0 && e.Verses[0].Verse == start {
+			// A refreshed page keeps its pin.
+			pinned = pinned || e.Pinned
 			continue
 		}
 		kept = append(kept, e)
 	}
 	c.file.Entries = append(kept, entry{
-		Book: book, Chapter: chapter, Total: total, Used: c.now().UnixNano(), Verses: fresh,
+		Book: book, Chapter: chapter, Total: total, Used: c.now().UnixNano(),
+		Pinned: pinned, Verses: fresh,
 	})
 	if notice != "" {
 		c.file.Notice = notice
@@ -122,6 +128,101 @@ func (c *VerseCache) VerseCount() int {
 	return countVerses(c.file.Entries)
 }
 
+// Has reports whether the page starting at startVerse is stored, and
+// whether it is pinned. It does not change recency.
+func (c *VerseCache) Has(book, chapter, startVerse int) (stored, pinned bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, e := range c.file.Entries {
+		if e.Book == book && e.Chapter == chapter && len(e.Verses) > 0 && e.Verses[0].Verse == startVerse {
+			return true, e.Pinned
+		}
+	}
+	return false, false
+}
+
+// SetPinned pins or unpins every stored page of a chapter. found is false
+// when no page of that chapter is stored, since only stored text can be
+// kept.
+func (c *VerseCache) SetPinned(book, chapter int, pinned bool) (found bool, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	changed := false
+	for i := range c.file.Entries {
+		e := &c.file.Entries[i]
+		if e.Book != book || e.Chapter != chapter {
+			continue
+		}
+		found = true
+		if e.Pinned != pinned {
+			e.Pinned = pinned
+			changed = true
+		}
+	}
+	if !changed {
+		return found, nil
+	}
+	return found, c.save()
+}
+
+// Touch marks every stored page of a chapter as just used, so the next
+// evictions take other pages first. It is not written until the next Put.
+func (c *VerseCache) Touch(book, chapter int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := c.now().UnixNano()
+	for i := range c.file.Entries {
+		if e := &c.file.Entries[i]; e.Book == book && e.Chapter == chapter {
+			e.Used = now
+		}
+	}
+}
+
+// Room is how many more verses of book could be stored if every page
+// that is unpinned and was last used before since were evicted. It is the
+// smaller of the room left under the 500-verse cap and under that book's
+// half-book cap, and never negative. bookBound is true when the half-book
+// cap is the smaller one.
+func (c *VerseCache) Room(book int, since time.Time) (room int, bookBound bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cutoff := since.UnixNano()
+	total, inBook := MaxStoredVerses, MaxVerses(book)
+	for _, e := range c.file.Entries {
+		if !e.Pinned && e.Used < cutoff {
+			continue
+		}
+		total -= len(e.Verses)
+		if e.Book == book {
+			inBook -= len(e.Verses)
+		}
+	}
+	return max(min(total, inBook), 0), inBook < total
+}
+
+// Stats counts stored verses, and how many of them and how many chapters
+// are pinned.
+type Stats struct {
+	Verses, PinnedVerses, PinnedChapters int
+}
+
+// Stats reports what is stored now.
+func (c *VerseCache) Stats() Stats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var s Stats
+	chapters := map[[2]int]bool{}
+	for _, e := range c.file.Entries {
+		s.Verses += len(e.Verses)
+		if e.Pinned {
+			s.PinnedVerses += len(e.Verses)
+			chapters[[2]int{e.Book, e.Chapter}] = true
+		}
+	}
+	s.PinnedChapters = len(chapters)
+	return s
+}
+
 func trimPage(book int, verses []api.Verse) []api.Verse {
 	limit := MaxVerses(book)
 	if limit > MaxStoredVerses {
@@ -133,10 +234,12 @@ func trimPage(book int, verses []api.Verse) []api.Verse {
 	return verses
 }
 
-// evict drops the least recently used pages until both caps hold. A book
-// that is over its own half-book cap loses its oldest page first, so
-// paging inside Obadiah does not flush an unrelated book. A single page
-// that is itself over a cap is trimmed. Reports whether anything changed.
+// evict drops the least recently used unpinned pages until both caps
+// hold. A book that is over its own half-book cap loses its oldest page
+// first, so paging inside Obadiah does not flush an unrelated book. A
+// single page that is itself over a cap is trimmed. Pins only ever cover
+// pages that were stored within the caps, so once every unpinned page is
+// gone the caps hold again. Reports whether anything changed.
 func (c *VerseCache) evict() bool {
 	changed := false
 	for {
@@ -183,12 +286,13 @@ func overBook(entries []entry) (book int, over bool) {
 	return 0, false
 }
 
-// dropOldest removes the least recently used entry. book > 0 limits the
-// choice to that book. Returns false when nothing could be removed.
+// dropOldest removes the least recently used unpinned entry. book > 0
+// limits the choice to that book. Returns false when nothing could be
+// removed.
 func (c *VerseCache) dropOldest(book int) bool {
 	oldest := -1
 	for i, e := range c.file.Entries {
-		if book > 0 && e.Book != book {
+		if e.Pinned || (book > 0 && e.Book != book) {
 			continue
 		}
 		if oldest < 0 || e.Used < c.file.Entries[oldest].Used {

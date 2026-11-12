@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"errors"
+
 	"omasword/internal/esv"
 	"omasword/internal/settings"
 	"omasword/internal/theme"
@@ -264,6 +266,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd, _ := m.handleListLoad(msg)
 		cmds = append(cmds, cmd)
 
+	case saveAheadDoneMsg:
+		m.savingAhead = false
+		m.status = saveAheadStatus(msg.res, msg.err)
+
 	case esvKeyResolvedMsg:
 		if msg.key != "" && m.esvClient != nil && !m.esvClient.HasKey() {
 			m.esvClient.SetKey(msg.key)
@@ -287,17 +293,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chapterLoadedMsg:
 		// A successful load means the earlier error no longer applies.
 		m.err = nil
-		m.chapterRetries = 0
 		m.loading = false
+		// Reloading the chapter that the BSB stood in for (the ESV is
+		// back, or still isn't) keeps your place instead of jumping to
+		// the top.
+		reload := m.fallback != "" && msg.book != 0 && msg.book == m.currentBook && msg.chapter == m.currentChapter
+		keepY := m.viewport.YOffset()
+		if !reload {
+			m.status = ""
+		}
+		m.fallback, m.fallbackErr = msg.fallback, msg.fallbackErr
 		m.currentVerses = msg.verses
 		m.currentParallelVerses = nil
-		if m.selectedTranslation == esv.ID {
+		if m.showingESV() {
 			m.esvFirst, m.esvLast, m.esvTotal = msg.esvFirst, msg.esvLast, msg.esvTotal
+			m.esvSaved, m.esvPinned = msg.esvSaved, msg.esvPinned
 			if msg.esvNotice != "" {
 				m.esvNotice = msg.esvNotice
 			}
 		} else {
 			m.esvFirst, m.esvLast, m.esvTotal = 0, 0, 0
+			m.esvSaved, m.esvPinned = false, false
+		}
+		if m.fallback != "" {
+			// Keep trying the ESV in the background, at the same pace as
+			// a failed chapter.
+			delay := listRetryDelay(m.chapterRetries)
+			var rate *esv.RateError
+			if errors.As(m.fallbackErr, &rate) {
+				delay = max(delay, rate.RetryAfter)
+			}
+			cmds = append(cmds, retryAfter(delay, retryChapterMsg{m.currentBook, m.currentChapter}))
+			m.chapterRetries++
+		} else {
+			m.chapterRetries = 0
 		}
 		// Track if we came from a search (highlighted verse was set)
 		cameFromSearch := m.highlightedVerseStart > 1
@@ -322,7 +351,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// If we came from a search, scroll to the highlighted verse
-		if cameFromSearch {
+		if reload {
+			m.viewport.SetYOffset(keepY)
+		} else if cameFromSearch {
 			m.scrollToHighlightedVerse()
 			m.topVisibleVerse = m.highlightedVerseStart
 		} else {

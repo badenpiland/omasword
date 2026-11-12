@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"omasword/internal/esv"
 	"omasword/internal/version"
 	"strings"
 
@@ -103,7 +104,7 @@ func (m Model) renderHeader() string {
 
 	breadcrumb := logoStyle.Render(logo+" omasword") +
 		separatorStyle.Render("  ·  ") +
-		breadcrumbStyle.Render(m.selectedTranslation) +
+		breadcrumbStyle.Render(m.readerTranslation()) +
 		separatorStyle.Render(" › ") +
 		breadcrumbStyle.Render(bookName) +
 		separatorStyle.Render(" › ") +
@@ -157,6 +158,14 @@ func (m Model) renderStatusBar() string {
 			msg = msg[:37] + "..."
 		}
 		right = errStyle.Render("⚠ " + msg)
+	} else if m.status != "" {
+		right = lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Render(ansi.Truncate("● "+m.status, max(m.width/2, 20), "…"))
+	} else if m.fallback != "" {
+		right = lipgloss.NewStyle().Foreground(m.currentTheme.Warning).Background(bg).Render("● " + m.fallbackStatus())
+	} else if m.showingESV() && m.esvPinned {
+		right = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render("● pinned")
+	} else if m.showingESV() && m.esvSaved {
+		right = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render("● saved")
 	} else if m.cache != nil && m.cache.IsCached(m.selectedTranslation) {
 		right = lipgloss.NewStyle().Foreground(m.currentTheme.Success).Background(bg).Render("● offline")
 	} else {
@@ -224,6 +233,9 @@ func (m Model) statusHints(key, dim lipgloss.Style) string {
 			{"s", "search"},
 			{"?", "about"},
 			{"q", "quit"},
+		}
+		if m.selectedTranslation == esv.ID {
+			hs = append(hs[:6], append([]hint{{"S", "save ahead"}, {"P", "pin"}}, hs[6:]...)...)
 		}
 	}
 

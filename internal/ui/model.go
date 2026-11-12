@@ -137,6 +137,16 @@ type Model struct {
 	esvNotice        string
 	esvKeyInput      textinput.Model
 	esvKeyThenSelect bool
+	// esvSaved and esvPinned describe the ESV page on screen.
+	esvSaved, esvPinned bool
+	savingAhead         bool
+	// fallback names the translation shown in place of an ESV chapter
+	// that couldn't be loaded (the BSB), and fallbackErr why.
+	fallback    string
+	fallbackErr error
+	// status is a short message for the status bar, cleared when you
+	// move to another chapter.
+	status string
 }
 
 type CacheInterface interface {
@@ -161,6 +171,13 @@ type (
 		verses                      []api.Verse
 		esvFirst, esvLast, esvTotal int
 		esvNotice                   string
+		esvSaved, esvPinned         bool
+		// book and chapter are set for ESV loads, including stand-ins.
+		book, chapter int
+		// fallback is set when verses are from this translation in place
+		// of an ESV chapter that failed with fallbackErr.
+		fallback    string
+		fallbackErr error
 	}
 	parallelVersesLoadedMsg struct{ verses map[string][]api.Verse }
 	cacheListLoadedMsg      struct{ translations []string }

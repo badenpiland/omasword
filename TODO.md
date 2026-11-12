@@ -11,11 +11,11 @@ multi-theme backlog were dropped when theming moved to Omarchy only.
 
 ## ESV offline (within Crossway's 500-verse cap)
 
-- [ ] **Save ahead** — a key that saves the next chapters from where you
+- [x] **Save ahead** — a key that saves the next chapters from where you
   are, up to the cap, before going offline.
-- [ ] **Pin chapters** — keep chosen chapters when older ones are dropped;
+- [x] **Pin chapters** — keep chosen chapters when older ones are dropped;
   they still count toward the cap.
-- [ ] **BSB fallback** — when offline and an ESV chapter isn't saved, show
+- [x] **BSB fallback** — when offline and an ESV chapter isn't saved, show
   the BSB for that chapter, clearly labeled, and switch back once online.
 
 ## Reading

@@ -247,9 +247,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			// If verses are highlighted, only copy those
 			if m.highlightedVerseStart > 0 {
 				if m.highlightedVerseStart == m.highlightedVerseEnd {
-					textToCopy.WriteString(fmt.Sprintf("%s %s %d:%d\n\n", m.selectedTranslation, m.currentBookName, m.currentChapter, m.highlightedVerseStart))
+					textToCopy.WriteString(fmt.Sprintf("%s %s %d:%d\n\n", m.readerTranslation(), m.currentBookName, m.currentChapter, m.highlightedVerseStart))
 				} else {
-					textToCopy.WriteString(fmt.Sprintf("%s %s %d:%d-%d\n\n", m.selectedTranslation, m.currentBookName, m.currentChapter, m.highlightedVerseStart, m.highlightedVerseEnd))
+					textToCopy.WriteString(fmt.Sprintf("%s %s %d:%d-%d\n\n", m.readerTranslation(), m.currentBookName, m.currentChapter, m.highlightedVerseStart, m.highlightedVerseEnd))
 				}
 
 				for _, v := range m.currentVerses {
@@ -260,7 +260,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				}
 			} else {
 				// Copy entire chapter
-				textToCopy.WriteString(fmt.Sprintf("%s %s %d\n\n", m.selectedTranslation, m.currentBookName, m.currentChapter))
+				textToCopy.WriteString(fmt.Sprintf("%s %s %d\n\n", m.readerTranslation(), m.currentBookName, m.currentChapter))
 
 				for _, v := range m.currentVerses {
 					text := stripHTMLTags(v.Text)
@@ -268,7 +268,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 				}
 			}
 
-			if m.selectedTranslation == esv.ID {
+			if m.showingESV() {
 				textToCopy.WriteString("\n")
 				textToCopy.WriteString(esv.Attribution(m.displayedESVNotice()))
 				textToCopy.WriteString("\n")
@@ -427,15 +427,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.err = nil
 			return m, nil, true
 		}
+	case "P":
+		if m.mode == modeReader {
+			return m.togglePin(), nil, true
+		}
+	case "S":
+		if m.mode == modeReader {
+			m, cmd := m.saveAhead()
+			return m, cmd, true
+		}
 	case ",":
-		if m.mode == modeReader && m.selectedTranslation == esv.ID && m.esvFirst > 1 {
+		if m.mode == modeReader && m.showingESV() && m.esvFirst > 1 {
 			m.esvPageBook, m.esvPageChapter = m.currentBook, m.currentChapter
 			m.esvPageStart = esv.PageStart(m.currentBook, m.esvFirst-1)
 			m.loading = true
 			return m, m.loadReadingChapter(m.currentBook, m.currentChapter), true
 		}
 	case ".":
-		if m.mode == modeReader && m.selectedTranslation == esv.ID && m.esvTotal > m.esvLast && m.esvLast > 0 {
+		if m.mode == modeReader && m.showingESV() && m.esvTotal > m.esvLast && m.esvLast > 0 {
 			m.esvPageBook, m.esvPageChapter = m.currentBook, m.currentChapter
 			m.esvPageStart = m.esvLast + 1
 			m.loading = true

@@ -20,13 +20,24 @@ func (m Model) loadReadingChapter(book, chapter int) tea.Cmd {
 	if m.esvPageBook == book && m.esvPageChapter == chapter && m.esvPageStart > 1 {
 		start = m.esvPageStart
 	}
-	client := m.esvClient
+	client, bolls := m.esvClient, m.client
 	return func() tea.Msg {
 		if client == nil || !client.HasKey() {
 			return chapterFailedMsg{book: book, chapter: chapter, err: esv.ErrNoKey}
 		}
 		page, err := client.Chapter(book, chapter, start)
 		if err != nil {
+			// Offline or rate limited: show the BSB (from a download when
+			// there is one) and keep retrying the ESV. A missing or
+			// rejected key is the user's to fix, so it stays an error.
+			if retryableChapterErr(err) && bolls != nil {
+				if verses, ferr := bolls.GetChapter(translations.Default, book, chapter); ferr == nil && len(verses) > 0 {
+					return chapterLoadedMsg{
+						verses: verses, book: book, chapter: chapter,
+						fallback: translations.Default, fallbackErr: err,
+					}
+				}
+			}
 			return chapterFailedMsg{book: book, chapter: chapter, err: err}
 		}
 		return chapterLoadedMsg{
@@ -35,6 +46,10 @@ func (m Model) loadReadingChapter(book, chapter int) tea.Cmd {
 			esvLast:   page.Last,
 			esvTotal:  page.Total,
 			esvNotice: page.Notice,
+			esvSaved:  page.Saved,
+			esvPinned: page.Pinned,
+			book:      book,
+			chapter:   chapter,
 		}
 	}
 }
