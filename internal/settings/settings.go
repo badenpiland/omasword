@@ -2,8 +2,11 @@ package settings
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type Settings struct {
@@ -58,9 +61,29 @@ func Load() (Settings, error) {
 	}
 
 	if err := json.Unmarshal(data, &s); err != nil {
-		return Settings{}, err
+		return Settings{}, &UnreadableError{Path: path, Err: err}
 	}
 	return s, nil
+}
+
+// UnreadableError means config.json exists but isn't valid JSON (a hand
+// edit gone wrong, say). The next Save keeps a copy of it first, so
+// settings such as esv_api_key_cmd can be copied back.
+type UnreadableError struct {
+	Path string
+	Err  error
+}
+
+func (e *UnreadableError) Error() string {
+	return fmt.Sprintf("can't read %s: %v", e.Path, e.Err)
+}
+
+func (e *UnreadableError) Unwrap() error { return e.Err }
+
+// IsUnreadable reports whether err is an UnreadableError.
+func IsUnreadable(err error) bool {
+	var u *UnreadableError
+	return errors.As(err, &u)
 }
 
 func Save(s Settings) error {
@@ -73,7 +96,27 @@ func Save(s Settings) error {
 	if err != nil {
 		return err
 	}
+	if err := keepUnreadable(path); err != nil {
+		return err
+	}
 	return writeFileAtomic(path, data, 0o644)
+}
+
+// keepUnreadable renames a config.json that isn't valid JSON to
+// config.json.<time>.bad before Save replaces it, so a typo doesn't cost
+// the settings in it. If the copy can't be made, Save fails and the file
+// stays as it is.
+func keepUnreadable(path string) error {
+	old, err := os.ReadFile(path)
+	if err != nil || json.Valid(old) {
+		return nil // nothing there, or nothing to lose
+	}
+	return os.Rename(path, BackupPath(path, time.Now()))
+}
+
+// BackupPath is where Save keeps an unreadable config.json.
+func BackupPath(path string, now time.Time) string {
+	return path + "." + now.Format("20060102-150405") + ".bad"
 }
 
 // writeFileAtomic writes data to a temp file beside path and renames it into
