@@ -96,7 +96,8 @@ func TestSavedListOpensAndRemoves(t *testing.T) {
 		t.Fatalf("mode %v list %+v", m.mode, m.savedList)
 	}
 	panel := plain(m.renderSaved())
-	if !strings.Contains(panel, "Exodus 1:1") || !strings.Contains(panel, "John 3:16–17") || !strings.Contains(panel, "3 of 500") {
+	if !strings.Contains(panel, "Exodus 1:1") || !strings.Contains(panel, "John 3:16–17") || !strings.Contains(panel, "3 of 500") ||
+		!strings.Contains(panel, "x remove") || !strings.Contains(panel, "⏎ open") {
 		t.Fatalf("panel %q", panel)
 	}
 	// Remove Exodus 1 (first in canonical order); its marker goes too.

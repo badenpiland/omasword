@@ -286,7 +286,8 @@ func (m Model) renderSaved() string {
 	}
 	content.WriteString(mutedStyle.Render(fmt.Sprintf("%d of %d verses · readable offline", total, esv.MaxStoredVerses)) + "\n\n")
 	if len(m.savedList) == 0 {
-		content.WriteString(mutedStyle.Render("Nothing saved yet. Select verses in the ESV (click, drag, or J/K) and press S."))
+		content.WriteString(mutedStyle.Render("Nothing saved yet. Select verses in the ESV (click, drag, or J/K) and press S.") + "\n\n")
+		content.WriteString(m.panelKeys([][2]string{{"esc", "close"}}))
 		return containerStyle.Render(content.String())
 	}
 	const window = 14
@@ -312,5 +313,18 @@ func (m Model) renderSaved() string {
 	if end < len(m.savedList) {
 		content.WriteString(mutedStyle.Render(fmt.Sprintf("  ↓ %d more", len(m.savedList)-end)) + "\n")
 	}
-	return containerStyle.Render(strings.TrimRight(content.String(), "\n"))
+	content.WriteString("\n" + m.panelKeys([][2]string{{"↑↓", "move"}, {"⏎", "open"}, {"x", "remove"}, {"esc", "close"}}))
+	return containerStyle.Render(content.String())
+}
+
+// panelKeys is a line of key hints inside a panel: "⏎ open · x remove".
+func (m Model) panelKeys(keys [][2]string) string {
+	bg := m.currentTheme.Background
+	key := lipgloss.NewStyle().Foreground(m.currentTheme.Accent).Background(bg).Bold(true)
+	dim := lipgloss.NewStyle().Foreground(m.currentTheme.Muted).Background(bg)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, key.Render(k[0])+dim.Render(" "+k[1]))
+	}
+	return strings.Join(parts, dim.Render("  ·  "))
 }
