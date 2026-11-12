@@ -103,6 +103,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.sidebarSelected--
 			return m, nil, true
 		} else if m.mode == modeReader && m.currentVerses != nil {
+			// With nothing selected, start at the top visible verse.
+			if m.highlightedVerseStart == 0 {
+				return m.selectTopVerse(), nil, true
+			}
 			// Navigate to previous verse
 			currentIdx := -1
 			for i, v := range m.currentVerses {
@@ -138,6 +142,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 			m.sidebarSelected++
 			return m, nil, true
 		} else if m.mode == modeReader && m.currentVerses != nil {
+			if m.highlightedVerseStart == 0 {
+				return m.selectTopVerse(), nil, true
+			}
 			// Navigate to next verse
 			currentIdx := -1
 			for i, v := range m.currentVerses {
@@ -519,6 +526,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (_ Model, _ tea.Cmd, handled bool) {
 		if m.focus == paneBooks {
 			m.focus = paneContent
 			return m, nil, true
+		}
+		if m.mode == modeReader && m.highlightedVerseStart > 0 {
+			return m.clearSelection(), nil, true
 		}
 	}
 	return m, nil, false

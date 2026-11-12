@@ -88,8 +88,11 @@ func (m Model) selection() []int {
 // extendSelection grows or shrinks the highlighted range by one verse,
 // keeping the verse where the selection started fixed.
 func (m Model) extendSelection(delta int) Model {
-	if m.currentVerses == nil || m.highlightedVerseStart == 0 {
+	if m.currentVerses == nil {
 		return m
+	}
+	if m.highlightedVerseStart == 0 {
+		return m.selectTopVerse()
 	}
 	start, end := m.highlightedVerseStart, m.highlightedVerseEnd
 	anchor := m.dragAnchorVerse
@@ -327,4 +330,24 @@ func (m Model) panelKeys(keys [][2]string) string {
 		parts = append(parts, key.Render(k[0])+dim.Render(" "+k[1]))
 	}
 	return strings.Join(parts, dim.Render("  ·  "))
+}
+
+// clearSelection drops the verse selection (esc). Copy then takes the
+// whole chapter, and scrolling doesn't select a verse again.
+func (m Model) clearSelection() Model {
+	m.highlightedVerseStart, m.highlightedVerseEnd, m.dragAnchorVerse = 0, 0, 0
+	m.rerenderContent()
+	return m
+}
+
+// selectTopVerse selects the verse at the top of the reading pane, where
+// j/k/J/K start when nothing is selected.
+func (m Model) selectTopVerse() Model {
+	if len(m.currentVerses) == 0 {
+		return m
+	}
+	v := m.calculateHighlightedVerse()
+	m.highlightedVerseStart, m.highlightedVerseEnd, m.dragAnchorVerse = v, v, v
+	m.rerenderContent()
+	return m
 }

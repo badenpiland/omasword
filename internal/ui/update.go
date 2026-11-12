@@ -471,7 +471,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Back at the top: drop the sticky indicator.
 				m.topVisibleVerse = 0
 			}
-			if newTopVerse != m.highlightedVerseStart {
+			// Scrolling moves a one-verse highlight along, but leaves a
+			// cleared selection (esc) cleared.
+			if m.highlightedVerseStart != 0 && newTopVerse != m.highlightedVerseStart {
 				m.highlightedVerseStart = newTopVerse
 				m.highlightedVerseEnd = newTopVerse
 				m.content = m.formatChapter(m.currentVerses, m.currentBookName, m.currentChapter, m.viewport.Width(), m.highlightedVerseStart, m.highlightedVerseEnd)

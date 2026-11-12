@@ -193,3 +193,22 @@ func TestVerseRanges(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestEscClearsTheSelection(t *testing.T) {
+	m := esvReader(t)
+	m = pressAll(t, m, "J", "J") // 1-3
+	m, _ = press(t, m, "esc")
+	if m.highlightedVerseStart != 0 || m.highlightedVerseEnd != 0 || m.mode != modeReader {
+		t.Fatalf("after esc: %d-%d mode %v", m.highlightedVerseStart, m.highlightedVerseEnd, m.mode)
+	}
+	if m, _ := press(t, m, "S"); !strings.Contains(m.status, "Select verses") || m.esvClient.SavedCount() != 0 {
+		t.Fatalf("S with nothing selected: %q", m.status)
+	}
+	// j starts a new selection at the top verse; so does J.
+	if m, _ := press(t, m, "j"); m.highlightedVerseStart != 1 || m.highlightedVerseEnd != 1 {
+		t.Fatalf("j after esc: %d-%d", m.highlightedVerseStart, m.highlightedVerseEnd)
+	}
+	if m, _ := press(t, m, "J"); m.highlightedVerseStart != 1 || m.highlightedVerseEnd != 1 {
+		t.Fatalf("J after esc: %d-%d", m.highlightedVerseStart, m.highlightedVerseEnd)
+	}
+}

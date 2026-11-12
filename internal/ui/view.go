@@ -477,6 +477,8 @@ func (m Model) renderRightPane(outerW, outerH int) string {
 	switch {
 	case scrolled && m.highlightedVerseStart > 0:
 		locator = mutedStyle.Render(fmt.Sprintf("  ↑ v. %d", m.highlightedVerseStart))
+	case scrolled && m.topVisibleVerse > 0:
+		locator = mutedStyle.Render(fmt.Sprintf("  ↑ v. %d", m.topVisibleVerse))
 	case !scrolled && m.highlightedVerseStart > 0 && m.highlightedVerseStart != m.highlightedVerseEnd:
 		locator = mutedStyle.Render(fmt.Sprintf("  v. %d–%d", m.highlightedVerseStart, m.highlightedVerseEnd))
 	case !scrolled && m.highlightedVerseStart > 1:

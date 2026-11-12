@@ -117,6 +117,7 @@ The default translation is the BSB. `--json` prints one JSON object. Exit codes 
 - `t` - Translation picker (`a` in that picker sets or clears an ESV API key)
 - `,` / `.` - Previous / next ESV page, when a chapter is longer than Crossway's per-page limit
 - `J` / `K` (or shift+↓ / shift+↑) - Extend the verse selection down / up. Click, drag, or shift-click selects verses with the mouse
+- `esc` - Clear the verse selection (`y` then copies the whole chapter)
 - `S` - Save the selected ESV verses to read offline; press again on saved verses to unsave them
 - `o` - List saved ESV verses (`⏎` opens, `x` removes)
 - `d` - Cache manager (`x` deletes a cached translation here)
